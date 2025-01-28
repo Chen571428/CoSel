@@ -11,7 +11,6 @@
     <v-app>
       <v-main>
         <v-container>
-          <!-- 筛选工具栏 -->
           <v-toolbar flat color="grey lighten-4" class="mb-4">
             <v-text-field
               v-model="search"
@@ -44,7 +43,6 @@
             ></v-select>
           </v-toolbar>
 
-          <!-- 课程表格 -->
           <v-data-table
             :headers="headers"
             :items="filteredCourses"
@@ -52,28 +50,24 @@
             :items-per-page="10"
             class="elevation-1"
           >
-            <!-- 课程号 -->
             <template v-slot:item.课程号="{ item }">
               <v-chip color="blue-grey" dark small>
                 {{ item.课程号 }}
               </v-chip>
             </template>
 
-            <!-- 班号 -->
             <template v-slot:item.班号="{ item }">
               <v-chip color="indigo" dark small>
                 {{ item.班号 }}
               </v-chip>
             </template>
 
-            <!-- 学分 -->
             <template v-slot:item.学分="{ item }">
               <v-chip color="teal" dark>
                 {{ item.学分 }} 学分
               </v-chip>
             </template>
 
-            <!-- 上课时间 -->
             <template v-slot:item.上课时间="{ item }">
               <div class="text-caption">
                 {{ formatWeekday(item.上课时间) }}<br>
@@ -81,7 +75,6 @@
               </div>
             </template>
 
-            <!-- 备注 -->
             <template v-slot:item.备注="{ item }">
               <v-tooltip bottom max-width="300">
                 <template v-slot:activator="{ on }">
@@ -91,20 +84,29 @@
               </v-tooltip>
             </template>
 
-            <!-- 操作 -->
             <template v-slot:item.操作="{ item }">
-              <v-btn
-                small
-                color="primary"
-                @click="selectCourse(item)"
-                :disabled="isCourseSelected(item)"
-              >
-                {{ isCourseSelected(item) ? '已选' : '选课' }}
-              </v-btn>
+              <div>
+                <v-btn
+                  small
+                  color="primary"
+                  @click="selectCourse(item, false)"
+                  :disabled="isCourseSelected(item)"
+                  class="mb-1"
+                >
+                  {{ isCourseSelected(item) ? '已选' : '选课' }}
+                </v-btn>
+                <v-btn
+                  small
+                  color="secondary"
+                  @click="selectCourse(item, true)"
+                  :disabled="isCourseSelected(item)"
+                >
+                  旁听
+                </v-btn>
+              </div>
             </template>
           </v-data-table>
 
-          <!-- 已选课程面板 -->
           <v-card class="mt-6">
             <v-card-title class="primary white--text">
               已选课程（总学分：{{ totalCredits }}）
@@ -130,7 +132,6 @@
               {{ creditAlertMessage }}
             </v-alert>
 
-            <!-- 学生信息对话框 -->
             <v-dialog v-model="dialog" max-width="500">
               <v-card>
                 <v-card-title class="headline">学生信息</v-card-title>
@@ -165,10 +166,13 @@
               <v-list-item
                 v-for="(course, index) in selectedCourses"
                 :key="index"
-                :class="{'conflict-item': hasConflict(course)}"
+                :class="{'conflict-item': hasConflict(course), 'audit-item': course.isAudit}"
               >
                 <v-list-item-content>
-                  <v-list-item-title>{{ course.课程名称 }}</v-list-item-title>
+                  <v-list-item-title>
+                    {{ course.课程名称 }}
+                    <v-chip v-if="course.isAudit" x-small color="grey" class="ml-1">旁听</v-chip>
+                  </v-list-item-title>
                   <v-list-item-subtitle>
                     {{ formatWeekday(course.上课时间) }} {{ formatTimePeriod(course.上课时间) }} | 
                     教师：{{ course.教师 }} | 
@@ -181,6 +185,14 @@
                 </v-list-item-content>
                 
                 <v-list-item-action>
+                  <v-switch
+                    v-model="course.isAudit"
+                    label="旁听"
+                    dense
+                    hide-details
+                    color="primary"
+                    class="mt-0"
+                  ></v-switch>
                   <v-btn icon @click="removeCourse(index)">
                     <v-icon color="red">mdi-delete</v-icon>
                   </v-btn>
@@ -197,8 +209,7 @@
   <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
   
   <script>
-    const csvData = `
-序号,课程号,课程名称,课程类型,开课单位,班号,学分,执行计划编号,起止周,上课时间,教师,备注
+    const csvData = `序号,课程号,课程名称,课程类型,开课单位,班号,学分,执行计划编号,起止周,上课时间,教师,备注
 1,00405596,量子材料前沿讲座,专业任选,物理学院,1,2,BZ2425200405596_19857,1-16,星期三(第7节-第8节),陈昱安,物理楼西563，一学年的课，2024秋季已听讲座的同学选课，研本合上
 2,00411851,光电功能材料,专业任选,物理学院,1,2,BZ2425200411851_12516,1-16,星期二(第7节-第8节),肖立新,研本合上
 3,00412250,量子规范场论,专业任选,物理学院,1,4,BZ2425200412250_15268,1-16,星期一(第7节-第8节)星期三(第3节-第4节),马滟青,研本合上
@@ -3226,7 +3237,7 @@
           { text: '上课时间', value: '上课时间', width: '150px' },
           { text: '教师', value: '教师', width: '120px' },
           { text: '备注', value: '备注', width: '80px' },
-          { text: '操作', value: '操作', width: '100px' }
+          { text: '操作', value: '操作', width: '150px' }
         ],
         courses: csvToJSON(csvData).map(course => ({
           ...course,
@@ -3254,7 +3265,9 @@
           });
         },
         totalCredits() {
-          return this.selectedCourses.reduce((sum, c) => sum + Number(c.学分), 0);
+          return this.selectedCourses
+            .filter(c => !c.isAudit)
+            .reduce((sum, c) => sum + Number(c.学分), 0);
         },
         hasTimeConflict() {
           return this.timeConflicts.length > 0;
@@ -3290,16 +3303,22 @@
         formatTimePeriod(timeStr) {
           return timeStr.replace(/星期[一二三四五六日]\(|\)/g, '');
         },
-        selectCourse(course) {
+        selectCourse(course, isAudit) {
           if (!this.isCourseSelected(course)) {
-            this.selectedCourses.push({...course, id: course.课程号});
+            this.selectedCourses.push({
+              ...course,
+              id: course.课程号 + '_' + course.班号,
+              isAudit: isAudit
+            });
           }
         },
         removeCourse(index) {
           this.selectedCourses.splice(index, 1);
         },
         isCourseSelected(course) {
-          return this.selectedCourses.some(c => c.课程号 === course.课程号);
+          return this.selectedCourses.some(c => 
+            c.课程号 === course.课程号 && c.班号 === course.班号
+          );
         },
         parseTime(course) {
           const weekdayMap = {一:1, 二:2, 三:3, 四:4, 五:5, 六:6, 日:7};
@@ -3352,14 +3371,16 @@
             return;
           }
 
-          if (this.selectedCourses.length === 0) {
-            alert('没有已选课程');
+          const selectedCourses = this.selectedCourses.filter(course => !course.isAudit);
+          
+          if (selectedCourses.length === 0) {
+            alert('没有正式选课课程');
             this.dialog = false;
             return;
           }
 
           const csvContent = "旁听证号,姓名,开课院系,课程名称,学分,课程号,班号\n" + 
-            this.selectedCourses.map(course => {
+            selectedCourses.map(course => {
               return [
                 this.studentId,
                 `"${this.studentName}"`,
@@ -3414,6 +3435,10 @@
       background-color: #ffebee !important;
       border-left: 4px solid #ff5252;
     }
+    .audit-item {
+      background-color: #f5f5f5 !important;
+      opacity: 0.8;
+    }
     .v-data-table td {
       white-space: nowrap;
     }
@@ -3425,6 +3450,10 @@
     }
     .v-card__title.primary {
       padding: 16px;
+    }
+    .v-list-item__action {
+      flex-direction: column;
+      align-items: flex-end;
     }
   </style>
 </body>
