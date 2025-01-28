@@ -101,6 +101,10 @@
           <v-card class="mt-6">
             <v-card-title class="primary white--text">
               已选课程（总学分：{{ totalCredits }}）
+              <v-btn small dark class="ml-4" @click="exportSchedule">
+                <v-icon left>mdi-download</v-icon>
+                导出课表
+              </v-btn>
               <v-chip color="red" class="ml-2" v-if="hasTimeConflict">
                 存在时间冲突！
               </v-chip>
@@ -3143,7 +3147,6 @@
 2981,04831420,数据结构与算法 (B),理科生必修,信息科学技术学院,9,3,BZ2425204831420_97900,1-16,星期二(第7节-第9节),郭炜,Python，同时选04830494“数据结构与算法上机”9号班
 2984,04832580,算法设计与分析（研讨型小班）,专业必修,信息科学技术学院,9,0,BZ2425204832580_94452,1-16,星期五(第5节-第6节),汪小林,小班会按照老师给的实际分班名单手动添加，冲突选课无法添加。
 2986,04833800,电子系统基础训练,专业必修,信息科学技术学院,9,1,BZ2425204833800_92352,9-15,,王青,第9-15周周三晚上6:00-9:30理科2号楼2258
-
     `.trim();
 
     function csvToJSON(csv) {
@@ -3269,6 +3272,60 @@
           return this.timeConflicts.some(pair => 
             pair.includes(course.id)
           );
+        },
+        // 新增导出功能
+        exportSchedule() {
+          if (this.selectedCourses.length === 0) {
+            alert('请先选择课程');
+            return;
+          }
+
+          const csvContent = "课程名称,星期,开始节数,结束节数,老师,地点,周数\n" + 
+            this.selectedCourses.map(course => {
+              const timeInfo = this.parseWakeupTime(course.上课时间);
+              const location = this.extractLocation(course.备注);
+              const weekRange = this.formatWeekRange(course.起止周);
+              
+              return [
+                `"${course.课程名称}"`,
+                timeInfo.weekday,
+                timeInfo.startSection,
+                timeInfo.endSection,
+                `"${course.教师}"`,
+                `"${location}"`,
+                `"${weekRange}"`
+              ].join(',');
+            }).join('\n');
+
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement("a");
+          const url = URL.createObjectURL(blob);
+          
+          link.setAttribute("href", url);
+          link.setAttribute("download", "wakeup_schedule.csv");
+          link.style.visibility = "hidden";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        },
+        parseWakeupTime(timeStr) {
+          const weekdayMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7 };
+          const match = timeStr.match(/星期([一二三四五六日])\(第(\d+)节-第(\d+)节\)/);
+          return {
+            weekday: weekdayMap[match[1]],
+            startSection: match[2],
+            endSection: match[3]
+          };
+        },
+        extractLocation(remark) {
+          const locationMatch = remark.match(/(.+?)[，,]/);
+          return locationMatch ? locationMatch[1] : '未知地点';
+        },
+        formatWeekRange(weekStr) {
+          return weekStr
+            .replace(/、/g, ',')
+            .replace(/，/g, ',')
+            .replace(/\s+/g, '');
         }
       }
     })
