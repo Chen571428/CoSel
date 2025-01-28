@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font@6.x/css/materialdesignicons.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
+</head>
+<body>
+  <div id="app">
+    <v-app>
+      <v-main>
+        <v-container>
+          <!-- 筛选工具栏 -->
+          <v-toolbar flat color="grey lighten-4" class="mb-4">
+            <v-text-field
+              v-model="search"
+              append-icon="mdi-magnify"
+              label="搜索课程"
+              hide-details
+              class="mr-4"
+              style="max-width: 300px;"
+            ></v-text-field>
+
+            <v-select
+              v-model="selectedDepartments"
+              :items="departments"
+              label="开课单位"
+              multiple
+              clearable
+              chips
+              style="max-width: 250px;"
+              class="mr-4"
+            ></v-select>
+
+            <v-select
+              v-model="selectedWeekdays"
+              :items="weekdays"
+              label="上课时间"
+              multiple
+              clearable
+              chips
+              style="max-width: 250px;"
+            ></v-select>
+          </v-toolbar>
+
+          <!-- 课程表格 -->
+          <v-data-table
+            :headers="headers"
+            :items="filteredCourses"
+            :search="search"
+            :items-per-page="10"
+            class="elevation-1"
+          >
+            <!-- 课程号 -->
+            <template v-slot:item.课程号="{ item }">
+              <v-chip color="blue-grey" dark small>
+                {{ item.课程号 }}
+              </v-chip>
+            </template>
+
+            <!-- 学分 -->
+            <template v-slot:item.学分="{ item }">
+              <v-chip color="teal" dark>
+                {{ item.学分 }} 学分
+              </v-chip>
+            </template>
+
+            <!-- 上课时间 -->
+            <template v-slot:item.上课时间="{ item }">
+              <div class="text-caption">
+                {{ formatWeekday(item.上课时间) }}<br>
+                {{ formatTimePeriod(item.上课时间) }}
+              </div>
+            </template>
+
+            <!-- 备注 -->
+            <template v-slot:item.备注="{ item }">
+              <v-tooltip bottom max-width="300">
+                <template v-slot:activator="{ on }">
+                  <v-icon small v-on="on">mdi-information</v-icon>
+                </template>
+                <span>{{ item.备注 }}</span>
+              </v-tooltip>
+            </template>
+
+            <!-- 操作 -->
+            <template v-slot:item.操作="{ item }">
+              <v-btn
+                small
+                color="primary"
+                @click="selectCourse(item)"
+                :disabled="isCourseSelected(item)"
+              >
+                {{ isCourseSelected(item) ? '已选' : '选课' }}
+              </v-btn>
+            </template>
+          </v-data-table>
+
+          <!-- 已选课程面板 -->
+          <v-card class="mt-6">
+            <v-card-title class="primary white--text">
+              已选课程（总学分：{{ totalCredits }}）
+              <v-chip color="red" class="ml-2" v-if="hasTimeConflict">
+                存在时间冲突！
+              </v-chip>
+            </v-card-title>
+
+            <v-alert
+              :type="creditAlertType"
+              dense
+              v-if="showCreditAlert"
+              class="mb-0"
+            >
+              {{ creditAlertMessage }}
+            </v-alert>
+
+            <v-list two-line>
+              <v-list-item
+                v-for="(course, index) in selectedCourses"
+                :key="index"
+                :class="{'conflict-item': hasConflict(course)}"
+              >
+                <v-list-item-content>
+                  <v-list-item-title>{{ course.课程名称 }}</v-list-item-title>
+                  <v-list-item-subtitle>
+                    {{ formatWeekday(course.上课时间) }} {{ formatTimePeriod(course.上课时间) }} | 
+                    教师：{{ course.教师 }} | 
+                    学分：{{ course.学分 }}
+                    <v-chip x-small color="error" v-if="hasConflict(course)">
+                      时间冲突
+                    </v-chip>
+                  </v-list-item-subtitle>
+                </v-list-item-content>
+                
+                <v-list-item-action>
+                  <v-btn icon @click="removeCourse(index)">
+                    <v-icon color="red">mdi-delete</v-icon>
+                  </v-btn>
+                </v-list-item-action>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-container>
+      </v-main>
+    </v-app>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+  
+  <script>
+    const csvData = `
+序号,课程号,课程名称,课程类型,开课单位,班号,学分,执行计划编号,起止周,上课时间,教师,备注
+1,00405596,量子材料前沿讲座,专业任选,物理学院,1,2,BZ2425200405596_19857,1-16,星期三(第7节-第8节),陈昱安,"物理楼西563，一学年的课，2024秋季已听讲座的同学选课，研本合上"
+2,00411851,光电功能材料,专业任选,物理学院,1,2,BZ2425200411851_12516,1-16,星期二(第7节-第8节),肖立新,"研本合上"
+    `.trim();
+
+    function csvToJSON(csv) {
+      const lines = csv.split('\n');
+      const headers = lines[0].split(',');
+      return lines.slice(1).map(line => {
+        const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+        return headers.reduce((obj, header, index) => {
+          obj[header] = values[index] ? values[index].replace(/^"|"$/g, '') : '';
+          return obj;
+        }, {});
+      });
+    }
+
+    new Vue({
+      el: '#app',
+      vuetify: new Vuetify(),
+      data: () => ({
+        search: '',
+        selectedDepartments: [],
+        selectedWeekdays: [],
+        selectedCourses: [],
+        headers: [
+          { text: '课程号', value: '课程号', width: '120px' },
+          { text: '课程名称', value: '课程名称' },
+          { text: '课程类型', value: '课程类型', width: '120px' },
+          { text: '开课单位', value: '开课单位', width: '150px' },
+          { text: '学分', value: '学分', width: '100px' },
+          { text: '上课时间', value: '上课时间', width: '150px' },
+          { text: '教师', value: '教师', width: '120px' },
+          { text: '备注', value: '备注', width: '80px' },
+          { text: '操作', value: '操作', width: '100px' }
+        ],
+        courses: csvToJSON(csvData).map(course => ({
+          ...course,
+          weekday: course.上课时间.match(/星期[一二三四五六日]/)?.[0] || ''
+        }))
+      }),
+      computed: {
+        departments() {
+          return [...new Set(this.courses.map(c => c.开课单位))];
+        },
+        weekdays() {
+          return [...new Set(this.courses.map(c => this.formatWeekday(c.上课时间)))];
+        },
+        filteredCourses() {
+          return this.courses.filter(course => {
+            const departmentMatch = this.selectedDepartments.length === 0 || 
+              this.selectedDepartments.includes(course.开课单位);
+            const weekdayMatch = this.selectedWeekdays.length === 0 || 
+              this.selectedWeekdays.includes(this.formatWeekday(course.上课时间));
+            const searchMatch = !this.search || 
+              Object.values(course).some(value => 
+                value.toString().toLowerCase().includes(this.search.toLowerCase())
+              );
+            return departmentMatch && weekdayMatch && searchMatch;
+          });
+        },
+        totalCredits() {
+          return this.selectedCourses.reduce((sum, c) => sum + Number(c.学分), 0);
+        },
+        hasTimeConflict() {
+          return this.timeConflicts.length > 0;
+        },
+        timeConflicts() {
+          const timeSlots = this.selectedCourses.map(c => this.parseTime(c));
+          const conflicts = [];
+          for (let i = 0; i < timeSlots.length; i++) {
+            for (let j = i + 1; j < timeSlots.length; j++) {
+              if (this.checkTimeConflict(timeSlots[i], timeSlots[j])) {
+                conflicts.push([timeSlots[i].id, timeSlots[j].id]);
+              }
+            }
+          }
+          return conflicts;
+        },
+        showCreditAlert() {
+          return this.totalCredits >= 25;
+        },
+        creditAlertType() {
+          return this.totalCredits >= 30 ? 'error' : 'warning';
+        },
+        creditAlertMessage() {
+          if (this.totalCredits >= 30) return '学分超过限制（≥30），请调整选课！';
+          if (this.totalCredits >= 25) return '学分超过推荐值（≥25），请注意学业负担！';
+          return '';
+        }
+      },
+      methods: {
+        formatWeekday(timeStr) {
+          return timeStr.match(/星期[一二三四五六日]/)?.[0] || '';
+        },
+        formatTimePeriod(timeStr) {
+          return timeStr.replace(/星期[一二三四五六日]\(|\)/g, '');
+        },
+        selectCourse(course) {
+          if (!this.isCourseSelected(course)) {
+            this.selectedCourses.push({...course, id: course.课程号});
+          }
+        },
+        removeCourse(index) {
+          this.selectedCourses.splice(index, 1);
+        },
+        isCourseSelected(course) {
+          return this.selectedCourses.some(c => c.课程号 === course.课程号);
+        },
+        parseTime(course) {
+          const weekdayMap = {一:1, 二:2, 三:3, 四:4, 五:5, 六:6, 日:7};
+          const match = course.上课时间.match(/星期([一二三四五六日])\(第(\d+)节-第(\d+)节\)/);
+          return {
+            weekday: weekdayMap[match[1]],
+            start: parseInt(match[2]),
+            end: parseInt(match[3]),
+            id: course.id
+          };
+        },
+        checkTimeConflict(a, b) {
+          return a.weekday === b.weekday && 
+                ((a.start >= b.start && a.start <= b.end) ||
+                 (b.start >= a.start && b.start <= a.end));
+        },
+        hasConflict(course) {
+          return this.timeConflicts.some(pair => 
+            pair.includes(course.id)
+          );
+        }
+      }
+    })
+  </script>
+
+  <style>
+    .conflict-item {
+      background-color: #ffebee !important;
+      border-left: 4px solid #ff5252;
+    }
+    .v-data-table td {
+      white-space: nowrap;
+    }
+    .v-data-table-header th {
+      font-weight: 600 !important;
+    }
+    .v-alert {
+      border-radius: 0;
+    }
+  </style>
+</body>
+</html>
