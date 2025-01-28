@@ -59,6 +59,13 @@
               </v-chip>
             </template>
 
+            <!-- 班号 -->
+            <template v-slot:item.班号="{ item }">
+              <v-chip color="indigo" dark small>
+                {{ item.班号 }}
+              </v-chip>
+            </template>
+
             <!-- 学分 -->
             <template v-slot:item.学分="{ item }">
               <v-chip color="teal" dark>
@@ -102,8 +109,12 @@
             <v-card-title class="primary white--text">
               已选课程（总学分：{{ totalCredits }}）
               <v-btn small dark class="ml-4" @click="exportSchedule">
-                <v-icon left>mdi-download</v-icon>
-                导出课表
+                <v-icon left>mdi-timetable</v-icon>
+                WakeUP课表导出
+              </v-btn>
+              <v-btn small dark class="ml-2" @click="dialog = true">
+                <v-icon left>mdi-account-school</v-icon>
+                交教务课表导出
               </v-btn>
               <v-chip color="red" class="ml-2" v-if="hasTimeConflict">
                 存在时间冲突！
@@ -119,6 +130,37 @@
               {{ creditAlertMessage }}
             </v-alert>
 
+            <!-- 学生信息对话框 -->
+            <v-dialog v-model="dialog" max-width="500">
+              <v-card>
+                <v-card-title class="headline">学生信息</v-card-title>
+                <v-card-text>
+                  <v-text-field
+                    v-model="studentId"
+                    label="旁听证号"
+                    outlined
+                    clearable
+                    required
+                    class="mb-4"
+                    :rules="[v => !!v || '必须填写旁听证号']"
+                  ></v-text-field>
+                  <v-text-field
+                    v-model="studentName"
+                    label="学生姓名"
+                    outlined
+                    clearable
+                    required
+                    :rules="[v => !!v || '必须填写姓名']"
+                  ></v-text-field>
+                </v-card-text>
+                <v-card-actions>
+                  <v-spacer></v-spacer>
+                  <v-btn color="error" @click="dialog = false">取消</v-btn>
+                  <v-btn color="primary" @click="exportSelectionList">导出CSV</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-dialog>
+
             <v-list two-line>
               <v-list-item
                 v-for="(course, index) in selectedCourses"
@@ -130,6 +172,7 @@
                   <v-list-item-subtitle>
                     {{ formatWeekday(course.上课时间) }} {{ formatTimePeriod(course.上课时间) }} | 
                     教师：{{ course.教师 }} | 
+                    班号：{{ course.班号 }} | 
                     学分：{{ course.学分 }}
                     <v-chip x-small color="error" v-if="hasConflict(course)">
                       时间冲突
@@ -154,7 +197,8 @@
   <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
   
   <script>
-    const csvData = `序号,课程号,课程名称,课程类型,开课单位,班号,学分,执行计划编号,起止周,上课时间,教师,备注
+    const csvData = `
+序号,课程号,课程名称,课程类型,开课单位,班号,学分,执行计划编号,起止周,上课时间,教师,备注
 1,00405596,量子材料前沿讲座,专业任选,物理学院,1,2,BZ2425200405596_19857,1-16,星期三(第7节-第8节),陈昱安,物理楼西563，一学年的课，2024秋季已听讲座的同学选课，研本合上
 2,00411851,光电功能材料,专业任选,物理学院,1,2,BZ2425200411851_12516,1-16,星期二(第7节-第8节),肖立新,研本合上
 3,00412250,量子规范场论,专业任选,物理学院,1,4,BZ2425200412250_15268,1-16,星期一(第7节-第8节)星期三(第3节-第4节),马滟青,研本合上
@@ -3147,7 +3191,7 @@
 2981,04831420,数据结构与算法 (B),理科生必修,信息科学技术学院,9,3,BZ2425204831420_97900,1-16,星期二(第7节-第9节),郭炜,Python，同时选04830494“数据结构与算法上机”9号班
 2984,04832580,算法设计与分析（研讨型小班）,专业必修,信息科学技术学院,9,0,BZ2425204832580_94452,1-16,星期五(第5节-第6节),汪小林,小班会按照老师给的实际分班名单手动添加，冲突选课无法添加。
 2986,04833800,电子系统基础训练,专业必修,信息科学技术学院,9,1,BZ2425204833800_92352,9-15,,王青,第9-15周周三晚上6:00-9:30理科2号楼2258
-    `.trim();
+`.trim();
 
     function csvToJSON(csv) {
       const lines = csv.split('\n');
@@ -3169,8 +3213,12 @@
         selectedDepartments: [],
         selectedWeekdays: [],
         selectedCourses: [],
+        dialog: false,
+        studentId: '',
+        studentName: '',
         headers: [
           { text: '课程号', value: '课程号', width: '120px' },
+          { text: '班号', value: '班号', width: '80px' },
           { text: '课程名称', value: '课程名称' },
           { text: '课程类型', value: '课程类型', width: '120px' },
           { text: '开课单位', value: '开课单位', width: '150px' },
@@ -3273,7 +3321,6 @@
             pair.includes(course.id)
           );
         },
-        // 新增导出功能
         exportSchedule() {
           if (this.selectedCourses.length === 0) {
             alert('请先选择课程');
@@ -3297,12 +3344,43 @@
               ].join(',');
             }).join('\n');
 
-          const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+          this.downloadCSV(csvContent, 'wakeup_schedule.csv');
+        },
+        exportSelectionList() {
+          if (!this.studentId || !this.studentName) {
+            alert('请填写旁听证号和姓名');
+            return;
+          }
+
+          if (this.selectedCourses.length === 0) {
+            alert('没有已选课程');
+            this.dialog = false;
+            return;
+          }
+
+          const csvContent = "旁听证号,姓名,开课院系,课程名称,学分,课程号,班号\n" + 
+            this.selectedCourses.map(course => {
+              return [
+                this.studentId,
+                `"${this.studentName}"`,
+                `"${course.开课单位}"`,
+                `"${course.课程名称}"`,
+                course.学分,
+                course.课程号,
+                course.班号
+              ].join(',');
+            }).join('\n');
+
+          this.downloadCSV(csvContent, 'course_selection.csv');
+          this.dialog = false;
+        },
+        downloadCSV(content, filename) {
+          const blob = new Blob(["\ufeff" + content], { type: 'text/csv;charset=utf-8;' });
           const link = document.createElement("a");
           const url = URL.createObjectURL(blob);
           
           link.setAttribute("href", url);
-          link.setAttribute("download", "wakeup_schedule.csv");
+          link.setAttribute("download", filename);
           link.style.visibility = "hidden";
           document.body.appendChild(link);
           link.click();
@@ -3344,6 +3422,9 @@
     }
     .v-alert {
       border-radius: 0;
+    }
+    .v-card__title.primary {
+      padding: 16px;
     }
   </style>
 </body>
