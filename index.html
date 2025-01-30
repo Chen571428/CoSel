@@ -178,12 +178,34 @@
             </v-dialog>
 
             <template v-if="showTimetable">
+              <v-row class="px-4 py-2" align="center">
+                <v-col cols="auto">
+                  <v-select
+                    v-model="currentWeek"
+                    :items="weekOptions"
+                    label="选择周次"
+                    dense
+                    style="max-width: 150px"
+                  ></v-select>
+                </v-col>
+                <v-col>
+                  <v-chip small>{{ isCurrentWeekOdd ? '单周' : '双周' }}</v-chip>
+                </v-col>
+              </v-row>
+
               <v-simple-table>
                 <template v-slot:default>
                   <thead>
                     <tr>
                       <th class="text-center">时间</th>
-                      <th v-for="day in weekdays" :key="day" class="text-center">{{ day }}</th>
+                      <th 
+                        v-for="dateInfo in weekDates" 
+                        :key="dateInfo.weekday" 
+                        class="text-center"
+                      >
+                        {{ dateInfo.weekday }}<br>
+                        <span class="text-caption">{{ dateInfo.month }}/{{ dateInfo.date }}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -193,12 +215,12 @@
                         <span class="text-caption">{{ period.period }}</span>
                       </td>
                       <td 
-                        v-for="(day, dayIndex) in weekdays" 
-                        :key="dayIndex"
+                        v-for="(dateInfo, dayIndex) in weekDates" 
+                        :key="dateInfo.weekday"
                         class="text-center"
                         :style="getCellStyle(dayIndex, index + 1)"
                       >
-                        <template v-if="getCourseTimeInfo(dayIndex, index + 1)">
+                        <template v-if="shouldShowCourse(dayIndex, index + 1)">
                           <div class="course-cell">
                             <strong>{{ getCourseTimeInfo(dayIndex, index + 1).course.课程名称 }}</strong>
                             <div class="text-caption">
@@ -3320,7 +3342,10 @@
           { period: "第十节", time: "18:40—19:30" },
           { period: "第十一节", time: "19:40—20:30" },
           { period: "第十二节", time: "20:40—21:30" }
-        ]
+        ],
+        currentWeek: 1,
+        semesterStartDate: new Date(2025, 1, 17), // 2025年2月17日，注意月份从0开始
+        totalWeeks: 18
       }),
       computed: {
         departments() {
@@ -3347,20 +3372,34 @@
             .filter(c => !c.isAudit)
             .reduce((sum, c) => sum + Number(c.学分), 0);
         },
-        hasTimeConflict() {
-          return this.timeConflicts.length > 0;
-        },
         timeConflicts() {
-          const timeSlots = this.selectedCourses.map(c => this.parseTime(c));
           const conflicts = [];
-          for (let i = 0; i < timeSlots.length; i++) {
-            for (let j = i + 1; j < timeSlots.length; j++) {
-              if (this.checkTimeConflict(timeSlots[i], timeSlots[j])) {
-                conflicts.push([timeSlots[i].id, timeSlots[j].id]);
+          
+          // 遍历所有已选课程
+          for (let i = 0; i < this.selectedCourses.length; i++) {
+            const course1 = this.selectedCourses[i];
+            const times1 = this.parseTime(course1);
+            
+            // 与后续的每个课程比较
+            for (let j = i + 1; j < this.selectedCourses.length; j++) {
+              const course2 = this.selectedCourses[j];
+              const times2 = this.parseTime(course2);
+              
+              // 检查两个课程的所有时间段是否存在冲突
+              const hasConflict = times1.some(t1 => 
+                times2.some(t2 => this.checkTimeConflict(t1, t2))
+              );
+              
+              if (hasConflict) {
+                conflicts.push([course1.id, course2.id]);
               }
             }
           }
+          
           return conflicts;
+        },
+        hasTimeConflict() {
+          return this.timeConflicts.length > 0;
         },
         showCreditAlert() {
           return this.totalCredits >= 25;
@@ -3372,6 +3411,31 @@
           if (this.totalCredits >= 30) return '学分超过限制（≥30），请调整选课！';
           if (this.totalCredits >= 25) return '学分超过推荐值（≥25），请注意学业负担！';
           return '';
+        },
+        weekOptions() {
+          return Array.from({ length: this.totalWeeks }, (_, i) => ({
+            text: `第${i + 1}周`,
+            value: i + 1
+          }));
+        },
+        weekDates() {
+          const dates = [];
+          const weekStart = new Date(this.semesterStartDate);
+          weekStart.setDate(weekStart.getDate() + (this.currentWeek - 1) * 7);
+          
+          for (let i = 0; i < 7; i++) {
+            const date = new Date(weekStart);
+            date.setDate(date.getDate() + i);
+            dates.push({
+              weekday: this.weekdays[i],
+              date: date.getDate(),
+              month: date.getMonth() + 1
+            });
+          }
+          return dates;
+        },
+        isCurrentWeekOdd() {
+          return this.currentWeek % 2 === 1;
         }
       },
       methods: {
@@ -3429,10 +3493,24 @@
           
           return times;
         },
-        checkTimeConflict(a, b) {
-          return a.weekday === b.weekday && 
-                ((a.start >= b.start && a.start <= b.end) ||
-                 (b.start >= a.start && b.start <= a.end));
+        checkTimeConflict(time1, time2) {
+          // 如果不是同一天，不冲突
+          if (time1.weekday !== time2.weekday) return false;
+          
+          // 检查周类型（单双周）
+          if (time1.weekType !== time2.weekType && 
+              time1.weekType !== 'all' && 
+              time2.weekType !== 'all') {
+            return false; // 单周和双周的课不冲突
+          }
+          
+          // 检查时间段是否重叠
+          const hasTimeOverlap = (
+            (time1.start >= time2.start && time1.start <= time2.end) ||
+            (time2.start >= time1.start && time2.start <= time1.end)
+          );
+          
+          return hasTimeOverlap;
         },
         hasConflict(course) {
           return this.timeConflicts.some(pair => 
@@ -3560,18 +3638,16 @@
         },
         getCellStyle(weekday, period) {
           const courseInfo = this.getCourseTimeInfo(weekday, period);
-          if (!courseInfo) return {};
+          if (!courseInfo || !this.shouldShowCourse(weekday, period)) return {};
           
           const { course, weekType } = courseInfo;
           const isAudit = course.isAudit;
           
-          // 基础颜色
           let backgroundColor = isAudit ? '#E8EAF6' : '#E3F2FD';
           let borderColor = isAudit ? '#3F51B5' : '#2196F3';
           
-          // 单双周课程使用不同的透明度
           if (weekType === '单' || weekType === '双') {
-            backgroundColor = backgroundColor + '80'; // 添加50%透明度
+            backgroundColor = backgroundColor + '80';
           }
           
           return {
@@ -3656,6 +3732,37 @@
           ].filter(Boolean).join('\n');
 
           alert(message);
+        },
+        shouldShowCourse(weekday, period) {
+          const courseInfo = this.getCourseTimeInfo(weekday, period);
+          if (!courseInfo) return false;
+
+          const course = courseInfo.course;
+          const weekType = courseInfo.weekType;
+          
+          // 检查周次范围
+          const weekRanges = this.parseWeekRange(course.起止周);
+          const isInWeekRange = weekRanges.some(range => 
+            this.currentWeek >= range.start && this.currentWeek <= range.end
+          );
+
+          // 检查单双周
+          const weekTypeMatch = 
+            weekType === 'all' || 
+            (weekType === '单' && this.isCurrentWeekOdd) ||
+            (weekType === '双' && !this.isCurrentWeekOdd);
+
+          return isInWeekRange && weekTypeMatch;
+        },
+        parseWeekRange(weekRangeStr) {
+          if (!weekRangeStr) return { start: 1, end: 16 };
+          
+          const ranges = weekRangeStr.split(/[,，]/).map(range => {
+            const [start, end] = range.split('-').map(Number);
+            return { start, end };
+          });
+          
+          return ranges;
         }
       }
     })
