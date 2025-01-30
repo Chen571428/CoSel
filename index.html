@@ -3394,7 +3394,7 @@
           if (!this.isCourseSelected(course)) {
             this.selectedCourses.push({
               ...course,
-              id: course.课程号 + '_' + course.班号,
+              id: `${course.课程号}_${course.班号}`,
               isAudit: isAudit
             });
           }
@@ -3601,7 +3601,7 @@
           const lines = csv.split('\n');
           if (lines.length < 2) throw new Error('文件格式不正确');
 
-          const headers = lines[0].split(',');
+          const headers = lines[0].split(',').map(h => h.trim());
           const requiredHeaders = ['旁听证号', '姓名', '开课院系', '课程名称', '学分', '课程号', '班号'];
           
           // 验证必要的列是否存在
@@ -3614,10 +3614,10 @@
           return lines.slice(1)
             .filter(line => line.trim())
             .map(line => {
-              const values = line.split(',');
+              const values = line.split(',').map(v => v.trim());
               const courseData = {};
               headers.forEach((header, index) => {
-                courseData[header] = values[index]?.replace(/^"|"$/g, '').trim();
+                courseData[header] = values[index]?.replace(/^"|"$/g, '').trim() || '';
               });
               return courseData;
             });
@@ -3625,26 +3625,37 @@
         importCourses(importedCourses) {
           let imported = 0;
           let skipped = 0;
+          let notFound = 0;
 
           importedCourses.forEach(importedCourse => {
             // 在可用课程中查找匹配的课程
             const course = this.courses.find(c => 
               c.课程号 === importedCourse.课程号 && 
-              c.班号 === importedCourse.班号
+              c.班号 === importedCourse.班号.toString() // 确保班号类型匹配
             );
 
             if (course) {
               // 检查是否已经选择了这门课
               if (!this.isCourseSelected(course)) {
-                this.selectCourse(course, false);
+                this.selectCourse(course, false); // false表示不是旁听
                 imported++;
               } else {
                 skipped++;
               }
+            } else {
+              console.warn('未找到课程:', importedCourse);
+              notFound++;
             }
           });
 
-          alert(`导入完成：\n成功导入 ${imported} 门课程\n已选课程 ${skipped} 门`);
+          const message = [
+            `导入完成：`,
+            `成功导入 ${imported} 门课程`,
+            `已选课程 ${skipped} 门`,
+            notFound > 0 ? `未找到 ${notFound} 门课程` : ''
+          ].filter(Boolean).join('\n');
+
+          alert(message);
         }
       }
     })
