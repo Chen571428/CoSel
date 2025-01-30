@@ -167,40 +167,40 @@
             </v-dialog>
 
             <template v-if="showTimetable">
-              <v-tabs v-model="tab">
-                <v-tab v-for="day in weekdays" :key="day">{{ day }}</v-tab>
-              </v-tabs>
-
-              <v-tabs-items v-model="tab">
-                <v-tab-item v-for="(day, dayIndex) in weekdays" :key="day">
-                  <v-timeline dense>
-                    <v-timeline-item
-                      v-for="(period, index) in schedule"
-                      :key="index"
-                      small
-                      :color="getCourseColor(dayIndex, index + 1)"
-                    >
-                      <template v-slot:opposite>
-                        <span>{{ period.time }}</span>
-                      </template>
-                      <v-card>
-                        <v-card-text>
-                          <div v-if="getCourseAtTime(dayIndex, index + 1)">
+              <v-simple-table>
+                <template v-slot:default>
+                  <thead>
+                    <tr>
+                      <th class="text-center">时间</th>
+                      <th v-for="day in weekdays" :key="day" class="text-center">{{ day }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(period, index) in schedule" :key="index">
+                      <td class="text-center" style="white-space: nowrap;">
+                        {{ period.time }}<br>
+                        <span class="text-caption">{{ period.period }}</span>
+                      </td>
+                      <td 
+                        v-for="(day, dayIndex) in weekdays" 
+                        :key="dayIndex"
+                        class="text-center"
+                        :style="getCellStyle(dayIndex, index + 1)"
+                      >
+                        <template v-if="getCourseAtTime(dayIndex, index + 1)">
+                          <div class="course-cell">
                             <strong>{{ getCourseAtTime(dayIndex, index + 1).课程名称 }}</strong>
                             <div class="text-caption">
-                              {{ getCourseAtTime(dayIndex, index + 1).教师 }} | 
+                              {{ getCourseAtTime(dayIndex, index + 1).教师 }}<br>
                               {{ getCourseAtTime(dayIndex, index + 1).开课单位 }}
                             </div>
                           </div>
-                          <div v-else>
-                            <span class="grey--text">无课程</span>
-                          </div>
-                        </v-card-text>
-                      </v-card>
-                    </v-timeline-item>
-                  </v-timeline>
-                </v-tab-item>
-              </v-tabs-items>
+                        </template>
+                      </td>
+                    </tr>
+                  </tbody>
+                </template>
+              </v-simple-table>
             </template>
 
             <v-list two-line v-else>
@@ -3495,6 +3495,19 @@
           const course = this.getCourseAtTime(weekday, period);
           if (!course) return 'grey';
           return course.isAudit ? 'secondary' : 'primary';
+        },
+        getCellStyle(weekday, period) {
+          const course = this.getCourseAtTime(weekday, period);
+          if (!course) return {};
+          
+          const backgroundColor = course.isAudit ? '#E8EAF6' : '#E3F2FD';
+          const borderColor = course.isAudit ? '#3F51B5' : '#2196F3';
+          
+          return {
+            backgroundColor: backgroundColor,
+            borderLeft: `3px solid ${borderColor}`,
+            padding: '0'
+          };
         }
       }
     })
@@ -3527,6 +3540,14 @@
     }
     .v-timeline-item__body {
       max-width: 300px;
+    }
+    .course-cell {
+      padding: 4px;
+      border-radius: 4px;
+      min-height: 60px;
+    }
+    .v-data-table td {
+      height: auto !important;
     }
   </style>
 </body>
