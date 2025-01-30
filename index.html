@@ -3306,7 +3306,7 @@
           return [...new Set(this.courses.map(c => c.开课单位))];
         },
         weekdays() {
-          return [...new Set(this.courses.map(c => this.formatWeekday(c.上课时间)))];
+          return ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
         },
         filteredCourses() {
           return this.courses.filter(course => {
