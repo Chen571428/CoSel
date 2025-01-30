@@ -114,6 +114,17 @@
                 <v-icon left>mdi-timetable</v-icon>
                 WakeUP课表导出
               </v-btn>
+              <v-btn small dark class="ml-2" @click="$refs.fileInput.click()">
+                <v-icon left>mdi-file-import</v-icon>
+                导入交教务课表
+              </v-btn>
+              <input
+                type="file"
+                ref="fileInput"
+                accept=".csv"
+                style="display: none"
+                @change="handleFileUpload"
+              >
               <v-btn small dark class="ml-2" @click="dialog = true">
                 <v-icon left>mdi-account-school</v-icon>
                 交教务课表导出
@@ -187,12 +198,18 @@
                         class="text-center"
                         :style="getCellStyle(dayIndex, index + 1)"
                       >
-                        <template v-if="getCourseAtTime(dayIndex, index + 1)">
+                        <template v-if="getCourseTimeInfo(dayIndex, index + 1)">
                           <div class="course-cell">
-                            <strong>{{ getCourseAtTime(dayIndex, index + 1).课程名称 }}</strong>
+                            <strong>{{ getCourseTimeInfo(dayIndex, index + 1).course.课程名称 }}</strong>
                             <div class="text-caption">
-                              {{ getCourseAtTime(dayIndex, index + 1).教师 }}<br>
-                              {{ getCourseAtTime(dayIndex, index + 1).开课单位 }}
+                              {{ getCourseTimeInfo(dayIndex, index + 1).course.教师 }}<br>
+                              {{ getCourseTimeInfo(dayIndex, index + 1).course.开课单位 }}
+                              <template v-if="getCourseTimeInfo(dayIndex, index + 1).weekType !== 'all'">
+                                <br>
+                                <v-chip x-small>
+                                  {{ getCourseTimeInfo(dayIndex, index + 1).weekType }}周
+                                </v-chip>
+                              </template>
                             </div>
                           </div>
                         </template>
@@ -3379,13 +3396,25 @@
         },
         parseTime(course) {
           const weekdayMap = {一:1, 二:2, 三:3, 四:4, 五:5, 六:6, 日:7};
-          const match = course.上课时间.match(/星期([一二三四五六日])\(第(\d+)节-第(\d+)节\)/);
-          return {
-            weekday: weekdayMap[match[1]],
-            start: parseInt(match[2]),
-            end: parseInt(match[3]),
-            id: course.id
-          };
+          const times = [];
+          
+          // 分割多个上课时间段
+          const timeSegments = course.上课时间.split(/(?=星期)/);
+          
+          timeSegments.forEach(segment => {
+            const match = segment.match(/星期([一二三四五六日])\(第(\d+)节-第(\d+)节\)(?:\(([单双])\))?/);
+            if (match) {
+              times.push({
+                weekday: weekdayMap[match[1]],
+                start: parseInt(match[2]),
+                end: parseInt(match[3]),
+                weekType: match[4] || 'all', // 'all' 表示每周，'单' 表示单周，'双' 表示双周
+                id: course.id
+              });
+            }
+          });
+          
+          return times;
         },
         checkTimeConflict(a, b) {
           return a.weekday === b.weekday && 
@@ -3485,29 +3514,125 @@
         },
         getCourseAtTime(weekday, period) {
           return this.selectedCourses.find(course => {
-            const time = this.parseTime(course);
-            return time.weekday === weekday + 1 && 
-                   time.start <= period && 
-                   time.end >= period;
+            const times = this.parseTime(course);
+            return times.some(time => 
+              time.weekday === weekday + 1 && 
+              time.start <= period && 
+              time.end >= period
+            );
           });
         },
-        getCourseColor(weekday, period) {
-          const course = this.getCourseAtTime(weekday, period);
-          if (!course) return 'grey';
-          return course.isAudit ? 'secondary' : 'primary';
+        getCourseTimeInfo(weekday, period) {
+          const course = this.selectedCourses.find(course => {
+            const times = this.parseTime(course);
+            return times.some(time => 
+              time.weekday === weekday + 1 && 
+              time.start <= period && 
+              time.end >= period
+            );
+          });
+
+          if (!course) return null;
+
+          const times = this.parseTime(course);
+          const timeInfo = times.find(time => 
+            time.weekday === weekday + 1 && 
+            time.start <= period && 
+            time.end >= period
+          );
+
+          return {
+            course,
+            weekType: timeInfo.weekType
+          };
         },
         getCellStyle(weekday, period) {
-          const course = this.getCourseAtTime(weekday, period);
-          if (!course) return {};
+          const courseInfo = this.getCourseTimeInfo(weekday, period);
+          if (!courseInfo) return {};
           
-          const backgroundColor = course.isAudit ? '#E8EAF6' : '#E3F2FD';
-          const borderColor = course.isAudit ? '#3F51B5' : '#2196F3';
+          const { course, weekType } = courseInfo;
+          const isAudit = course.isAudit;
+          
+          // 基础颜色
+          let backgroundColor = isAudit ? '#E8EAF6' : '#E3F2FD';
+          let borderColor = isAudit ? '#3F51B5' : '#2196F3';
+          
+          // 单双周课程使用不同的透明度
+          if (weekType === '单' || weekType === '双') {
+            backgroundColor = backgroundColor + '80'; // 添加50%透明度
+          }
           
           return {
             backgroundColor: backgroundColor,
             borderLeft: `3px solid ${borderColor}`,
             padding: '0'
           };
+        },
+        handleFileUpload(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const csv = e.target.result;
+              const courses = this.parseImportedCSV(csv);
+              this.importCourses(courses);
+              this.$refs.fileInput.value = ''; // 重置文件输入
+            } catch (error) {
+              alert('导入失败：' + error.message);
+            }
+          };
+          reader.readAsText(file);
+        },
+        parseImportedCSV(csv) {
+          const lines = csv.split('\n');
+          if (lines.length < 2) throw new Error('文件格式不正确');
+
+          const headers = lines[0].split(',');
+          const requiredHeaders = ['旁听证号', '姓名', '开课院系', '课程名称', '学分', '课程号', '班号'];
+          
+          // 验证必要的列是否存在
+          requiredHeaders.forEach(header => {
+            if (!headers.includes(header)) {
+              throw new Error(`缺少必要的列：${header}`);
+            }
+          });
+
+          return lines.slice(1)
+            .filter(line => line.trim())
+            .map(line => {
+              const values = line.split(',');
+              const courseData = {};
+              headers.forEach((header, index) => {
+                courseData[header] = values[index]?.replace(/^"|"$/g, '').trim();
+              });
+              return courseData;
+            });
+        },
+        importCourses(importedCourses) {
+          let imported = 0;
+          let skipped = 0;
+
+          importedCourses.forEach(importedCourse => {
+            // 在可用课程中查找匹配的课程
+            const course = this.courses.find(c => 
+              c.课程号 === importedCourse.课程号 && 
+              c.班号 === importedCourse.班号
+            );
+
+            if (course) {
+              // 检查是否已经选择了这门课
+              if (!this.isCourseSelected(course)) {
+                this.selectCourse(course, false);
+                imported++;
+              } else {
+                skipped++;
+              }
+            }
+          });
+
+          alert(`导入完成：\n成功导入 ${imported} 门课程\n已选课程 ${skipped} 门`);
         }
       }
     })
