@@ -232,8 +232,12 @@
                     <v-chip v-if="course.isAudit" x-small color="grey" class="ml-1">旁听</v-chip>
                   </v-list-item-title>
                   <v-list-item-subtitle>
-                    {{ formatWeekday(course.上课时间) }} {{ formatTimePeriod(course.上课时间) }} | 
-                    教师：{{ course.教师 }} | 
+                    <template v-for="(time, index) in parseTime(course)">
+                      {{ weekdays[time.weekday - 1] }} 第{{ time.start }}-{{ time.end }}节
+                      <template v-if="time.weekType !== 'all'">({{ time.weekType }})</template>
+                      <template v-if="index < parseTime(course).length - 1">、</template>
+                    </template>
+                    | 教师：{{ course.教师 }} | 
                     班号：{{ course.班号 }} | 
                     学分：{{ course.学分 }}
                     <v-chip x-small color="error" v-if="hasConflict(course)">
@@ -2224,7 +2228,7 @@
 1903,30301020,社会调查与研究方法（2）,全校公选课,教务部,1,3,BZ2425230301020_19027,1-16,星期一(第5节-第7节),,"清华课程,教师：晋军；上课时间:周一13:30--16:05地点:新水利馆301 --补录"
 1904,01235100,数据库概论,专业任选,地球与空间科学学院,1,3,BZ2425201235100_16643,1-16,星期二(第5节-第6节)星期五(第3节-第4节)(双),张毅,
 1905,01235210,智能交通系统概论,专业任选,地球与空间科学学院,1,2,BZ2425201235210_18467,1-16,星期四(第3节-第4节),张飞舟,
-1905,01139011,北京春季开花植物观察,通选课,生命科学学院,1,1,BZ2425201139011_17408,1-16,,孟世勇,校外，开课时间为周日，第4-13周隔周上课 --补录
+1905,01139011,北京春季开花植物观察,通选课,生命科学学院,1,1,BZ2425201139011_17408,4-13,星期日(双),孟世勇,校外，开课时间为周日，第4-13周隔周上课 --补录
 1906,01235450,地理学基础,专业必修,地球与空间科学学院,1,3,BZ2425201235450_11500,1-16,星期一(第7节-第8节)(单)星期四(第7节-第8节),田原,
 1907,06235060,财务会计,专业任选,国家发展研究院,1,3,BZ2425206235060_16394,1-16,星期六(第1节-第3节),张昕,
 1907,02335100,知识论,专业必修,哲学系,1,2,BZ2425202335100_16241,1-16,星期三(第5节-第6节),赵斌,理论模块
@@ -3372,10 +3376,19 @@
       },
       methods: {
         formatWeekday(timeStr) {
-          return timeStr.match(/星期[一二三四五六日]/)?.[0] || '';
+          const weekdays = timeStr.match(/星期[一二三四五六日]/g) || [];
+          return weekdays.join('、');
         },
         formatTimePeriod(timeStr) {
-          return timeStr.replace(/星期[一二三四五六日]\(|\)/g, '');
+          const periods = timeStr.split(/(?=星期)/).map(segment => {
+            const match = segment.match(/\(第(\d+)节-第(\d+)节\)(?:\(([单双])\))?/);
+            if (match) {
+              const weekType = match[3] ? `(${match[3]})` : '';
+              return `第${match[1]}-${match[2]}节${weekType}`;
+            }
+            return '';
+          }).filter(Boolean);
+          return periods.join('、');
         },
         selectCourse(course, isAudit) {
           if (!this.isCourseSelected(course)) {
@@ -3432,22 +3445,28 @@
             return;
           }
 
+          const csvRows = [];
+          this.selectedCourses.forEach(course => {
+            const times = this.parseTime(course);
+            const location = this.extractLocation(course.备注);
+            const weekRange = this.formatWeekRange(course.起止周);
+            
+            // 为每个时间段创建一行
+            times.forEach(time => {
+              csvRows.push([
+                course.课程名称,
+                time.weekday,
+                time.start,
+                time.end,
+                course.教师,
+                location,
+                weekRange
+              ].map(value => `"${value}"`).join(','));
+            });
+          });
+
           const csvContent = "课程名称,星期,开始节数,结束节数,老师,地点,周数\n" + 
-            this.selectedCourses.map(course => {
-              const timeInfo = this.parseWakeupTime(course.上课时间);
-              const location = this.extractLocation(course.备注);
-              const weekRange = this.formatWeekRange(course.起止周);
-              
-              return [
-                `"${course.课程名称}"`,
-                timeInfo.weekday,
-                timeInfo.startSection,
-                timeInfo.endSection,
-                `"${course.教师}"`,
-                `"${location}"`,
-                `"${weekRange}"`
-              ].join(',');
-            }).join('\n');
+            csvRows.join('\n');
 
           this.downloadCSV(csvContent, 'wakeup_schedule.csv');
         },
@@ -3493,20 +3512,13 @@
           link.click();
           document.body.removeChild(link);
         },
-        parseWakeupTime(timeStr) {
-          const weekdayMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7 };
-          const match = timeStr.match(/星期([一二三四五六日])\(第(\d+)节-第(\d+)节\)/);
-          return {
-            weekday: weekdayMap[match[1]],
-            startSection: match[2],
-            endSection: match[3]
-          };
-        },
         extractLocation(remark) {
-          const locationMatch = remark.match(/(.+?)[，,]/);
-          return locationMatch ? locationMatch[1] : '未知地点';
+          if (!remark) return '未知地点';
+          const locationMatch = remark.match(/([^，,]+?)[，,]/);
+          return locationMatch ? locationMatch[1] : remark;
         },
         formatWeekRange(weekStr) {
+          if (!weekStr) return '1-16';
           return weekStr
             .replace(/、/g, ',')
             .replace(/，/g, ',')
