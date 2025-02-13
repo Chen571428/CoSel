@@ -26,7 +26,8 @@
             <v-btn 
               icon 
               class="theme-toggle-btn"
-              @click="$vuetify.theme.dark = !$vuetify.theme.dark"
+              @click="toggleTheme"
+              v-tooltip="'点击切换主题（当前跟随系统设置）'"
             >
               <v-icon>{{ $vuetify.theme.dark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
             </v-btn>
@@ -443,6 +444,66 @@
             </v-card>
           </v-slide-y-transition>
         </v-container>
+        <v-footer
+          app
+          :color="$vuetify.theme.dark ? 'grey darken-3' : 'grey lighten-4'"
+          class="footer-container"
+        >
+          <v-container>
+            <v-row justify="center" align="center">
+              <v-col cols="12" class="text-center">
+                <div class="footer-content">
+                  <span class="author-info">
+                     Created by 
+                    <a 
+                      href="mailto:2400934013@stu.pku.edu.cn" 
+                      class="footer-link"
+                      v-tooltip="'点击发送邮件'"
+                    >
+                      StatInfer 
+                    </a>
+                     2025
+                  </span>
+                  <span class="divider">|</span>
+                  <span class="license-info">
+                    <a 
+                      href="https://opensource.org/licenses/MIT" 
+                      target="_blank"
+                      class="footer-link"
+                      v-tooltip="'查看许可证详情'"
+                    >
+                      MIT License
+                    </a>
+                  </span>
+                  <span class="divider">|</span>
+                  <span class="github-info">
+                    <a 
+                      href="https://github.com/Chen571428/CoSel" 
+                      target="_blank"
+                      class="footer-link"
+                      v-tooltip="'访问 Github 仓库'"
+                    >
+                      <v-icon small class="mr-1">mdi-github</v-icon>
+                      Source
+                    </a>
+                  </span>
+                  <span class="divider">|</span>
+                  <span class="edit-info">
+                    <a 
+                      href="https://github.com/Chen571428/CoSel/edit/main/index.html" 
+                      target="_blank"
+                      class="footer-link"
+                      v-tooltip="'在 Github 上编辑此页面'"
+                    >
+                      <v-icon small class="mr-1">mdi-pencil</v-icon>
+                      Edit this page at Github
+                    </a>
+                  </span>
+                </div>
+              </v-col>
+            </v-row>
+          </v-container>
+        </v-footer>
       </v-main>
     </v-app>
   </div>
@@ -455,9 +516,9 @@
       el: '#app',
       vuetify: new Vuetify({
         theme: {
-          dark: false, // 默认使用亮色主题
+          dark: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches,
           options: {
-            customProperties: true, // 启用CSS变量
+            customProperties: true,
           },
           themes: {
             light: {
@@ -631,6 +692,15 @@
         },
         isCurrentWeekOdd() {
           return this.currentWeek % 2 === 1;
+        }
+      },
+      mounted() {
+        // 监听系统主题变化
+        if (window.matchMedia) {
+          const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+          mediaQuery.addListener((e) => {
+            this.$vuetify.theme.dark = e.matches;
+          });
         }
       },
       methods: {
@@ -984,6 +1054,17 @@
         },
         filterDepartments(item, queryText, itemText) {
           return itemText.toLowerCase().indexOf(queryText.toLowerCase()) > -1;
+        },
+        toggleTheme() {
+          // 移除系统主题跟随
+          if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            mediaQuery.removeListener((e) => {
+              this.$vuetify.theme.dark = e.matches;
+            });
+          }
+          // 手动切换主题
+          this.$vuetify.theme.dark = !this.$vuetify.theme.dark;
         }
       }
     })
@@ -1452,23 +1533,45 @@
       z-index: 1;
     }
 
-    /* 主题切换按钮效果 */
+    /* 主题切换按钮样式 */
     .theme-toggle-btn {
-      transition: transform 0.3s ease !important;
+      position: relative;
+      transition: all 0.3s ease !important;
+    }
+
+    .theme-toggle-btn::after {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--v-primary-base);
+      bottom: 2px;
+      right: 2px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    /* 手动模式指示器 */
+    .theme-toggle-btn.manual::after {
+      opacity: 1;
+    }
+
+    /* 主题切换动画 */
+    @keyframes theme-transition {
+      0% {
+        transform: rotate(0) scale(1);
+      }
+      50% {
+        transform: rotate(180deg) scale(0.8);
+      }
+      100% {
+        transform: rotate(360deg) scale(1);
+      }
     }
 
     .theme-toggle-btn:hover {
-      transform: rotate(30deg);
-    }
-
-    /* 动画效果 */
-    @keyframes rotate {
-      0% {
-        transform: rotate(0deg);
-      }
-      100% {
-        transform: rotate(360deg);
-      }
+      animation: theme-transition 0.6s ease;
     }
 
     /* 响应式调整 */
@@ -1503,6 +1606,97 @@
     .v-app-bar--fixed {
       position: fixed !important;
     }
+
+    /* 页脚容器样式 */
+    .footer-container {
+      position: relative !important;
+      padding: 12px 0 !important;
+      z-index: 1 !important;
+      backdrop-filter: blur(10px) !important;
+      -webkit-backdrop-filter: blur(10px) !important;
+    }
+
+    /* 页脚内容样式 */
+    .footer-content {
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      flex-wrap: wrap !important;
+      gap: 8px !important;
+      font-size: 0.875rem !important;
+      color: var(--v-secondary-base) !important;
+    }
+
+    /* 分隔符样式 */
+    .divider {
+      opacity: 0.5 !important;
+      margin: 0 4px !important;
+    }
+
+    /* 链接样式 */
+    .footer-link {
+      text-decoration: none !important;
+      color: var(--v-primary-base) !important;
+      transition: opacity 0.3s ease !important;
+      display: inline-flex !important;
+      align-items: center !important;
+    }
+
+    .footer-link:hover {
+      opacity: 0.8 !important;
+      text-decoration: underline !important;
+    }
+
+    /* 图标样式 */
+    .footer-link .v-icon {
+      font-size: 16px !important;
+      margin-right: 4px !important;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 600px) {
+      .footer-content {
+        font-size: 0.75rem !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+      }
+
+      .divider {
+        display: none !important;
+      }
+
+      .edit-info {
+        margin-top: 4px !important;
+      }
+    }
+
+    /* 深色主题适配 */
+    .theme--dark .footer-container {
+      background: rgb(0, 0, 0) !important;
+    }
+
+    .theme--dark .footer-content {
+      color: rgba(255, 255, 255, 0.7) !important;
+    }
+
+    /* 浅色主题适配 */
+    .theme--light .footer-container {
+      background: rgb(250, 250, 250) !important;
+    }
+
+    .theme--light .footer-content {
+      color: rgba(0, 0, 0, 0.6) !important;
+    }
+
+    /* 编辑链接特殊样式
+    .edit-info .footer-link {
+      color: var(--v-accent-base) !important;
+    }
+
+    .edit-info .footer-link:hover {
+      opacity: 1 !important;
+      text-decoration: underline !important;
+    } */
   </style>
 </body>
 </html>
