@@ -13,339 +13,435 @@
     <v-app>
       <v-main>
         <v-container fluid>
-          <v-toolbar flat color="grey lighten-4" class="mb-4">
-            <v-text-field
-              v-model="search"
-              append-icon="mdi-magnify"
-              label="搜索课程"
-              hide-details
-              class="mr-4"
-              style="max-width: 300px;"
-            ></v-text-field>
-
-            <v-select
-              v-model="selectedDepartments"
-              :items="departments"
-              label="开课单位"
-              multiple
-              clearable
-              chips
-              style="max-width: 250px;"
-              class="mr-4"
-            ></v-select>
-
-            <v-select
-              v-model="selectedWeekdays"
-              :items="weekdays"
-              label="上课时间"
-              multiple
-              clearable
-              chips
-              style="max-width: 250px;"
-            ></v-select>
-          </v-toolbar>
-
-          <v-data-table
-            :headers="headers"
-            :items="filteredCourses"
-            :search="search"
-            :custom-filter="() => true"
-            :items-per-page="itemsPerPage"
-            :footer-props="{
-              'items-per-page-options': [10, 20, 25, 50, 100, -1],
-              'items-per-page-text': '每页显示:',
-              'items-per-page-all-text': '全部',
-              showFirstLastPage: true,
-              'first-icon': 'mdi-page-first',
-              'last-icon': 'mdi-page-last',
-              'prev-icon': 'mdi-chevron-left',
-              'next-icon': 'mdi-chevron-right'
-            }"
-            class="elevation-1"
+          <v-app-bar 
+            app 
+            :class="$vuetify.theme.dark ? 'glassmorphism-dark' : 'glassmorphism-light'"
+            elevation="0"
           >
-            <template v-slot:item.课程号="{ item }">
-              <a 
-                :href="getCourseDetailUrl(item)"
-                target="_blank"
-                class="course-link"
-                v-tooltip="'点击查看课程详情'"
-              >
-                {{ item.课程号 }}
-              </a>
-            </template>
-            
-            <template v-slot:item.课程名称="{ item }">
-              <a 
-                :href="getCourseDetailUrl(item)"
-                target="_blank"
-                class="course-link"
-                v-tooltip="'点击查看课程详情'"
-              >
-                {{ item.课程名称 }}
-              </a>
-            </template>
-
-            <template v-slot:item.班号="{ item }">
-              <v-chip color="indigo" dark small>
-                {{ item.班号 }}
-              </v-chip>
-            </template>
-
-            <template v-slot:item.学分="{ item }">
-              <v-chip color="teal" dark>
-                {{ item.学分 }} 学分
-              </v-chip>
-            </template>
-
-            <template v-slot:item.上课时间="{ item }">
-              <div class="text-caption">
-                {{ formatWeekday(item.上课时间) }}<br>
-                {{ formatTimePeriod(item.上课时间) }}
-              </div>
-            </template>
-
-            <template v-slot:item.备注="{ item }">
-              <v-tooltip bottom max-width="300">
-                <template v-slot:activator="{ on }">
-                  <v-icon small v-on="on">mdi-information</v-icon>
-                </template>
-                <span>{{ item.备注 }}</span>
-              </v-tooltip>
-            </template>
-
-            <template v-slot:item.操作="{ item }">
-              <template v-if="isCourseSelected(item)">
-                <v-btn
-                  small
-                  color="error"
-                  @click="removeCourseByItem(item)"
-                >
-                  取消
-                </v-btn>
-              </template>
-              <template v-else>
-                <v-btn
-                  small
-                  color="primary"
-                  @click="selectCourse(item, false)"
-                >
-                  选课
-                </v-btn>
-                <v-btn
-                  small
-                  color="secondary"
-                  class="ml-2"
-                  @click="selectCourse(item, true)"
-                >
-                  旁听
-                </v-btn>
-              </template>
-            </template>
-          </v-data-table>
-
-          <v-card class="mt-6">
-            <v-card-title class="primary white--text">
-              已选课程（总学分：{{ totalCredits }}）
-              <v-btn small dark class="ml-4" @click="exportSchedule">
-                <v-icon left>mdi-timetable</v-icon>
-                WakeUP课表导出
-              </v-btn>
-              <v-btn small dark class="ml-2" @click="$refs.fileInput.click()">
-                <v-icon left>mdi-file-import</v-icon>
-                导入交教务课表
-              </v-btn>
-              <input
-                type="file"
-                ref="fileInput"
-                accept=".csv"
-                style="display: none"
-                @change="handleFileUpload"
-              >
-              <v-btn small dark class="ml-2" @click="dialog = true">
-                <v-icon left>mdi-account-school</v-icon>
-                交教务课表导出
-              </v-btn>
-              <v-chip color="red" class="ml-2" v-if="hasTimeConflict">
-                存在时间冲突！
-              </v-chip>
-              <v-btn small dark class="ml-2" @click="showTimetable = !showTimetable">
-                <v-icon left>mdi-calendar</v-icon>
-                {{ showTimetable ? '列表视图' : '时间表视图' }}
-              </v-btn>
-            </v-card-title>
-
-            <v-alert
-              :type="creditAlertType"
-              dense
-              v-if="showCreditAlert"
-              class="mb-0"
+            <div class="blur-background"></div>
+            <v-toolbar-title class="pl-4 font-weight-medium">
+              PKU CoSel | 白鲸大学手动选课辅助工具
+            </v-toolbar-title>
+            <v-spacer></v-spacer>
+            <v-btn 
+              icon 
+              class="theme-toggle-btn"
+              @click="$vuetify.theme.dark = !$vuetify.theme.dark"
             >
-              {{ creditAlertMessage }}
-            </v-alert>
+              <v-icon>{{ $vuetify.theme.dark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+            </v-btn>
+          </v-app-bar>
 
-            <v-dialog v-model="dialog" max-width="500">
-              <v-card>
-                <v-card-title class="headline">学生信息</v-card-title>
-                <v-card-text>
-                  <v-text-field
-                    v-model="studentId"
-                    label="旁听证号"
-                    outlined
-                    clearable
-                    required
-                    class="mb-4"
-                    :rules="[v => !!v || '必须填写旁听证号']"
-                  ></v-text-field>
-                  <v-text-field
-                    v-model="studentName"
-                    label="学生姓名"
-                    outlined
-                    clearable
-                    required
-                    :rules="[v => !!v || '必须填写姓名']"
-                  ></v-text-field>
-                </v-card-text>
-                <v-card-actions>
-                  <v-spacer></v-spacer>
-                  <v-btn color="error" @click="dialog = false">取消</v-btn>
-                  <v-btn color="primary" @click="exportSelectionList">导出CSV</v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-dialog>
+          <v-fade-transition>
+            <v-toolbar
+              flat
+              :color="$vuetify.theme.dark ? 'grey darken-3' : 'grey lighten-4'"
+              class="mb-4 search-toolbar elevation-2"
+              rounded
+            >
+              <v-container class="pa-0">
+                <v-row align="center" justify="center" class="search-row">
+                  <v-col cols="12" sm="4" md="3" class="search-col">
+                    <v-text-field
+                      v-model="search"
+                      append-icon="mdi-magnify"
+                      label="搜索课程"
+                      hide-details
+                      dense
+                      :dark="$vuetify.theme.dark"
+                      :background-color="$vuetify.theme.dark ? 'grey darken-2' : 'white'"
+                      class="search-field rounded-lg"
+                      filled
+                      rounded
+                    ></v-text-field>
+                  </v-col>
 
-            <template v-if="showTimetable">
-              <v-row class="px-4 py-2" align="center">
-                <v-col cols="auto">
-                  <v-select
-                    v-model="currentWeek"
-                    :items="weekOptions"
-                    label="选择周次"
-                    dense
-                    style="max-width: 150px"
-                  ></v-select>
-                </v-col>
-                <v-col>
-                  <v-chip small>{{ isCurrentWeekOdd ? '单周' : '双周' }}</v-chip>
-                </v-col>
-              </v-row>
+                  <v-col cols="12" sm="4" md="3" class="search-col">
+                    <v-combobox
+                      v-model="selectedDepartments"
+                      :items="departments"
+                      label="开课单位"
+                      multiple
+                      clearable
+                      chips
+                      small-chips
+                      deletable-chips
+                      dense
+                      hide-details
+                      :dark="$vuetify.theme.dark"
+                      :background-color="$vuetify.theme.dark ? 'grey darken-2' : 'white'"
+                      class="search-field rounded-lg"
+                      filled
+                      rounded
+                    >
+                      <template v-slot:selection="{ attrs, item, select, selected }">
+                        <v-chip
+                          v-bind="attrs"
+                          :input-value="selected"
+                          close
+                          @click="select"
+                          @click:close="removeItem(item, selectedDepartments)"
+                          small
+                          class="custom-chip"
+                        >
+                          {{ item }}
+                        </v-chip>
+                      </template>
+                    </v-combobox>
+                  </v-col>
 
-              <v-simple-table>
-                <template v-slot:default>
-                  <thead>
-                    <tr>
-                      <th class="text-center">时间</th>
-                      <th 
-                        v-for="dateInfo in weekDates" 
-                        :key="dateInfo.weekday" 
-                        class="text-center"
-                      >
-                        {{ dateInfo.weekday }}<br>
-                        <span class="text-caption">{{ dateInfo.month }}/{{ dateInfo.date }}</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(period, index) in schedule" :key="index">
-                      <td class="text-center" style="white-space: nowrap;">
-                        {{ period.time }}<br>
-                        <span class="text-caption">{{ period.period }}</span>
-                      </td>
-                      <td 
-                        v-for="(dateInfo, dayIndex) in weekDates" 
-                        :key="dateInfo.weekday"
-                        class="text-center"
-                        :style="getCellStyle(dayIndex, index + 1)"
-                      >
-                        <template v-if="shouldShowCourse(dayIndex, index + 1)">
-                          <div class="course-cell">
-                            <v-tooltip bottom>
-                              <template v-slot:activator="{ on, attrs }">
+                  <v-col cols="12" sm="4" md="3" class="search-col">
+                    <v-combobox
+                      v-model="selectedWeekdays"
+                      :items="weekdays"
+                      label="上课时间"
+                      multiple
+                      clearable
+                      chips
+                      small-chips
+                      deletable-chips
+                      dense
+                      hide-details
+                      :dark="$vuetify.theme.dark"
+                      :background-color="$vuetify.theme.dark ? 'grey darken-2' : 'white'"
+                      class="search-field rounded-lg"
+                      filled
+                      rounded
+                    >
+                      <template v-slot:selection="{ attrs, item, select, selected }">
+                        <v-chip
+                          v-bind="attrs"
+                          :input-value="selected"
+                          close
+                          @click="select"
+                          @click:close="removeItem(item, selectedWeekdays)"
+                          small
+                          class="custom-chip"
+                        >
+                          {{ item }}
+                        </v-chip>
+                      </template>
+                    </v-combobox>
+                  </v-col>
+                </v-row>
+              </v-container>
+            </v-toolbar>
+          </v-fade-transition>
+
+          <v-slide-y-transition>
+            <v-data-table
+              :headers="headers"
+              :items="filteredCourses"
+              :search="search"
+              :custom-filter="() => true"
+              :items-per-page="itemsPerPage"
+              :footer-props="{
+                'items-per-page-options': [10, 20, 25, 50, 100, -1],
+                'items-per-page-text': '每页显示:',
+                'items-per-page-all-text': '全部',
+                showFirstLastPage: true,
+                'first-icon': 'mdi-page-first',
+                'last-icon': 'mdi-page-last',
+                'prev-icon': 'mdi-chevron-left',
+                'next-icon': 'mdi-chevron-right'
+              }"
+              class="elevation-2"
+              :loading="loading"
+              loading-text="加载中..."
+            >
+              <template v-slot:item.课程号="{ item }">
+                <a 
+                  :href="getCourseDetailUrl(item)"
+                  target="_blank"
+                  class="course-link"
+                  v-tooltip="'点击查看课程详情'"
+                >
+                  {{ item.课程号 }}
+                </a>
+              </template>
+              
+              <template v-slot:item.课程名称="{ item }">
+                <a 
+                  :href="getCourseDetailUrl(item)"
+                  target="_blank"
+                  class="course-link"
+                  v-tooltip="'点击查看课程详情'"
+                >
+                  {{ item.课程名称 }}
+                </a>
+              </template>
+
+              <template v-slot:item.班号="{ item }">
+                <v-chip color="indigo" dark small>
+                  {{ item.班号 }}
+                </v-chip>
+              </template>
+
+              <template v-slot:item.学分="{ item }">
+                <v-chip color="teal" dark>
+                  {{ item.学分 }} 学分
+                </v-chip>
+              </template>
+
+              <template v-slot:item.上课时间="{ item }">
+                <div class="text-caption">
+                  {{ formatWeekday(item.上课时间) }}<br>
+                  {{ formatTimePeriod(item.上课时间) }}
+                </div>
+              </template>
+
+              <template v-slot:item.备注="{ item }">
+                <v-tooltip bottom max-width="300">
+                  <template v-slot:activator="{ on }">
+                    <v-icon small v-on="on">mdi-information</v-icon>
+                  </template>
+                  <span>{{ item.备注 }}</span>
+                </v-tooltip>
+              </template>
+
+              <template v-slot:item.操作="{ item }">
+                <template v-if="isCourseSelected(item)">
+                  <v-btn
+                    small
+                    color="error"
+                    @click="removeCourseByItem(item)"
+                  >
+                    取消
+                  </v-btn>
+                </template>
+                <template v-else>
+                  <v-btn
+                    small
+                    color="primary"
+                    @click="selectCourse(item, false)"
+                  >
+                    选课
+                  </v-btn>
+                  <v-btn
+                    small
+                    color="secondary"
+                    class="ml-2"
+                    @click="selectCourse(item, true)"
+                  >
+                    旁听
+                  </v-btn>
+                </template>
+              </template>
+            </v-data-table>
+          </v-slide-y-transition>
+
+          <v-slide-y-transition>
+            <v-card class="mt-6 elevation-2">
+              <v-card-title class="primary white--text">
+                已选课程（总学分：{{ totalCredits }}）
+                <v-btn small dark class="ml-4" @click="exportSchedule">
+                  <v-icon left>mdi-timetable</v-icon>
+                  WakeUP课表导出
+                </v-btn>
+                <v-btn small dark class="ml-2" @click="$refs.fileInput.click()">
+                  <v-icon left>mdi-file-import</v-icon>
+                  导入交教务课表
+                </v-btn>
+                <input
+                  type="file"
+                  ref="fileInput"
+                  accept=".csv"
+                  style="display: none"
+                  @change="handleFileUpload"
+                >
+                <v-btn small dark class="ml-2" @click="dialog = true">
+                  <v-icon left>mdi-account-school</v-icon>
+                  交教务课表导出
+                </v-btn>
+                <v-chip 
+                  :class="$vuetify.theme.dark ? 'conflict-chip' : 'error'"
+                  small 
+                  class="ml-2" 
+                  v-if="hasTimeConflict"
+                >
+                  <v-icon left small>mdi-alert-circle</v-icon>
+                  存在时间冲突！
+                </v-chip>
+                <v-btn small dark class="ml-2" @click="showTimetable = !showTimetable">
+                  <v-icon left>mdi-calendar</v-icon>
+                  {{ showTimetable ? '列表视图' : '时间表视图' }}
+                </v-btn>
+              </v-card-title>
+
+              <v-alert
+                :type="creditAlertType"
+                dense
+                v-if="showCreditAlert"
+                class="mb-0"
+              >
+                {{ creditAlertMessage }}
+              </v-alert>
+
+              <v-dialog v-model="dialog" max-width="500">
+                <v-card>
+                  <v-card-title class="headline">学生信息</v-card-title>
+                  <v-card-text>
+                    <v-text-field
+                      v-model="studentId"
+                      label="旁听证号"
+                      outlined
+                      clearable
+                      required
+                      class="mb-4"
+                      :rules="[v => !!v || '必须填写旁听证号']"
+                    ></v-text-field>
+                    <v-text-field
+                      v-model="studentName"
+                      label="学生姓名"
+                      outlined
+                      clearable
+                      required
+                      :rules="[v => !!v || '必须填写姓名']"
+                    ></v-text-field>
+                  </v-card-text>
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn color="error" @click="dialog = false">取消</v-btn>
+                    <v-btn color="primary" @click="exportSelectionList">导出CSV</v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-dialog>
+
+              <template v-if="showTimetable">
+                <v-row class="px-4 py-2" align="center">
+                  <v-col cols="auto">
+                    <v-select
+                      v-model="currentWeek"
+                      :items="weekOptions"
+                      label="选择周次"
+                      dense
+                      style="max-width: 150px"
+                    ></v-select>
+                  </v-col>
+                  <v-col>
+                    <v-chip small>{{ isCurrentWeekOdd ? '单周' : '双周' }}</v-chip>
+                  </v-col>
+                </v-row>
+
+                <v-simple-table class="timetable-container">
+                  <template v-slot:default>
+                    <thead>
+                      <tr>
+                        <th class="text-center time-column">时间</th>
+                        <th 
+                          v-for="dateInfo in weekDates" 
+                          :key="dateInfo.weekday" 
+                          class="text-center weekday-column"
+                        >
+                          {{ dateInfo.weekday }}<br>
+                          <span class="text-caption">{{ dateInfo.month }}/{{ dateInfo.date }}</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(period, index) in schedule" :key="index">
+                        <td class="text-center time-column">
+                          {{ period.time }}<br>
+                          <span class="text-caption">{{ period.period }}</span>
+                        </td>
+                        <td 
+                          v-for="(dateInfo, dayIndex) in weekDates" 
+                          :key="dateInfo.weekday"
+                          class="text-center course-cell-container"
+                        >
+                          <template v-if="shouldShowCourse(dayIndex, index + 1)">
+                            <div :class="getCellClasses(dayIndex, index + 1)">
+                              <div class="course-title">
                                 <a 
                                   :href="getCourseDetailUrl(getCourseTimeInfo(dayIndex, index + 1).course)"
                                   target="_blank"
                                   class="course-link"
-                                  v-bind="attrs"
-                                  v-on="on"
+                                  v-tooltip="'点击查看课程详情'"
                                 >
-                                  <strong>{{ getCourseTimeInfo(dayIndex, index + 1).course.课程名称 }}</strong>
+                                  {{ getCourseTimeInfo(dayIndex, index + 1).course.课程名称 }}
                                 </a>
-                              </template>
-                              <span>点击查看课程详情</span>
-                            </v-tooltip>
-                            <div class="text-caption">
-                              {{ getCourseTimeInfo(dayIndex, index + 1).course.教师 }}<br>
-                              {{ getCourseTimeInfo(dayIndex, index + 1).course.开课单位 }}
-                              <template v-if="getCourseTimeInfo(dayIndex, index + 1).weekType !== 'all'">
+                              </div>
+                              <div class="course-info">
+                                {{ getCourseTimeInfo(dayIndex, index + 1).course.教师 }}
                                 <br>
-                                <v-chip x-small>
-                                  {{ getCourseTimeInfo(dayIndex, index + 1).weekType }}周
-                                </v-chip>
-                              </template>
+                                {{ getCourseTimeInfo(dayIndex, index + 1).course.开课单位 }}
+                                <template v-if="getCourseTimeInfo(dayIndex, index + 1).weekType !== 'all'">
+                                  <br>
+                                  <v-chip x-small class="week-type-chip">
+                                    {{ getCourseTimeInfo(dayIndex, index + 1).weekType }}周
+                                  </v-chip>
+                                </template>
+                              </div>
                             </div>
-                          </div>
-                        </template>
-                      </td>
-                    </tr>
-                  </tbody>
-                </template>
-              </v-simple-table>
-            </template>
+                          </template>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </template>
+                </v-simple-table>
+              </template>
 
-            <v-list two-line v-else>
-              <v-list-item
-                v-for="(course, index) in selectedCourses"
-                :key="index"
-                :class="{'conflict-item': hasConflict(course), 'audit-item': course.isAudit}"
-              >
-                <v-list-item-content>
-                  <v-list-item-title>
-                    <v-tooltip bottom>
-                      <template v-slot:activator="{ on, attrs }">
-                        <a 
-                          :href="getCourseDetailUrl(course)"
-                          target="_blank"
-                          class="course-link"
-                          v-bind="attrs"
-                          v-on="on"
-                        >
-                          {{ course.课程名称 }}
-                        </a>
+              <v-list two-line v-else>
+                <v-list-item
+                  v-for="(course, index) in selectedCourses"
+                  :key="index"
+                  :class="{'conflict-item': hasConflict(course), 'audit-item': course.isAudit}"
+                >
+                  <v-list-item-content>
+                    <v-list-item-title>
+                      <v-tooltip bottom>
+                        <template v-slot:activator="{ on, attrs }">
+                          <a 
+                            :href="getCourseDetailUrl(course)"
+                            target="_blank"
+                            class="course-link"
+                            v-bind="attrs"
+                            v-on="on"
+                          >
+                            {{ course.课程名称 }}
+                          </a>
+                        </template>
+                        <span>点击查看课程详情</span>
+                      </v-tooltip>
+                      <v-chip v-if="course.isAudit" x-small color="grey" class="ml-1">旁听</v-chip>
+                    </v-list-item-title>
+                    <v-list-item-subtitle>
+                      <template v-for="(time, index) in parseTime(course)">
+                        {{ weekdays[time.weekday - 1] }} 第{{ time.start }}-{{ time.end }}节
+                        <template v-if="time.weekType !== 'all'">({{ time.weekType }})</template>
+                        <template v-if="index < parseTime(course).length - 1">、</template>
                       </template>
-                      <span>点击查看课程详情</span>
-                    </v-tooltip>
-                    <v-chip v-if="course.isAudit" x-small color="grey" class="ml-1">旁听</v-chip>
-                  </v-list-item-title>
-                  <v-list-item-subtitle>
-                    <template v-for="(time, index) in parseTime(course)">
-                      {{ weekdays[time.weekday - 1] }} 第{{ time.start }}-{{ time.end }}节
-                      <template v-if="time.weekType !== 'all'">({{ time.weekType }})</template>
-                      <template v-if="index < parseTime(course).length - 1">、</template>
-                    </template>
-                    | 教师：{{ course.教师 }} | 
-                    班号：{{ course.班号 }} | 
-                    学分：{{ course.学分 }}
-                    <v-chip x-small color="error" v-if="hasConflict(course)">
-                      时间冲突
-                    </v-chip>
-                  </v-list-item-subtitle>
-                </v-list-item-content>
-                
-                <v-list-item-action>
-                  <v-switch
-                    v-model="course.isAudit"
-                    label="旁听"
-                    dense
-                    hide-details
-                    color="primary"
-                    class="mt-0"
-                  ></v-switch>
-                  <v-btn icon @click="removeCourse(index)">
-                    <v-icon color="red">mdi-delete</v-icon>
-                  </v-btn>
-                </v-list-item-action>
-              </v-list-item>
-            </v-list>
-          </v-card>
+                      | 教师：{{ course.教师 }} | 
+                      班号：{{ course.班号 }} | 
+                      学分：{{ course.学分 }}
+                      <v-chip 
+                        x-small 
+                        :class="$vuetify.theme.dark ? 'conflict-chip' : 'error'"
+                        v-if="hasConflict(course)"
+                      >
+                        <v-icon left x-small>mdi-alert-circle</v-icon>
+                        时间冲突
+                      </v-chip>
+                    </v-list-item-subtitle>
+                  </v-list-item-content>
+                  
+                  <v-list-item-action>
+                    <v-switch
+                      v-model="course.isAudit"
+                      label="旁听"
+                      dense
+                      hide-details
+                      color="primary"
+                      class="mt-0"
+                    ></v-switch>
+                    <v-btn icon @click="removeCourse(index)">
+                      <v-icon color="red">mdi-delete</v-icon>
+                    </v-btn>
+                  </v-list-item-action>
+                </v-list-item>
+              </v-list>
+            </v-card>
+          </v-slide-y-transition>
         </v-container>
       </v-main>
     </v-app>
@@ -357,7 +453,34 @@
   <script>
     new Vue({
       el: '#app',
-      vuetify: new Vuetify(),
+      vuetify: new Vuetify({
+        theme: {
+          dark: false, // 默认使用亮色主题
+          options: {
+            customProperties: true, // 启用CSS变量
+          },
+          themes: {
+            light: {
+              primary: '#1976D2',
+              secondary: '#424242',
+              accent: '#82B1FF',
+              error: '#FF5252',
+              info: '#2196F3',
+              success: '#4CAF50',
+              warning: '#FFC107'
+            },
+            dark: {
+              primary: '#2196F3',
+              secondary: '#757575',
+              accent: '#82B1FF',
+              error: '#FF5252',
+              info: '#2196F3',
+              success: '#4CAF50',
+              warning: '#FFC107'
+            }
+          }
+        }
+      }),
       data: () => ({
         courses: [], // 初始为空数组
         search: '',
@@ -367,7 +490,7 @@
         dialog: false,
         studentId: '',
         studentName: '',
-        itemsPerPage: 20,
+        itemsPerPage: 10,
         headers: [
           { text: '课程号', value: '课程号', width: '120px' },
           { text: '班号', value: '班号', width: '80px' },
@@ -708,25 +831,19 @@
             weekType: timeInfo.weekType
           };
         },
-        getCellStyle(weekday, period) {
+        getCellClasses(weekday, period) {
           const courseInfo = this.getCourseTimeInfo(weekday, period);
-          if (!courseInfo || !this.shouldShowCourse(weekday, period)) return {};
+          if (!courseInfo || !this.shouldShowCourse(weekday, period)) return '';
           
           const { course, weekType } = courseInfo;
           const isAudit = course.isAudit;
+          const hasConflict = this.hasConflict(course);
           
-          let backgroundColor = isAudit ? '#E8EAF6' : '#E3F2FD';
-          let borderColor = isAudit ? '#3F51B5' : '#2196F3';
-          
-          if (weekType === '单' || weekType === '双') {
-            backgroundColor = backgroundColor + '80';
-          }
-          
-          return {
-            backgroundColor: backgroundColor,
-            borderLeft: `3px solid ${borderColor}`,
-            padding: '0'
-          };
+          return [
+            'course-cell',
+            hasConflict ? 'conflict-cell' : (isAudit ? 'course-audit' : 'course-regular'),
+            (weekType === '单' || weekType === '双') ? 'course-alternate' : ''
+          ].filter(Boolean).join(' ');
         },
         handleFileUpload(event) {
           const file = event.target.files[0];
@@ -858,69 +975,533 @@
               return obj;
             }, {});
           });
+        },
+        removeItem(item, array) {
+          const index = array.indexOf(item);
+          if (index >= 0) {
+            array.splice(index, 1);
+          }
+        },
+        filterDepartments(item, queryText, itemText) {
+          return itemText.toLowerCase().indexOf(queryText.toLowerCase()) > -1;
         }
       }
     })
   </script>
 
   <style>
-    .conflict-item {
-      background-color: #ffebee !important;
-      border-left: 4px solid #ff5252;
-    }
-    .audit-item {
-      background-color: #f5f5f5 !important;
-      opacity: 0.8;
-    }
-    .v-data-table td {
-      height: auto !important;
-      white-space: nowrap;
-    }
-    .v-data-table-header th {
-      font-weight: 600 !important;
-    }
-    .v-alert {
-      border-radius: 0;
-    }
-    .v-card__title.primary {
-      padding: 16px;
-    }
-    .v-list-item__action {
-      flex-direction: column;
-      align-items: flex-end;
-    }
-    .v-timeline-item__body {
-      max-width: 300px;
-    }
-    .course-cell {
-      padding: 4px;
-      min-height: 60px;
-    }
     .course-link {
       text-decoration: none;
       color: inherit;
+      transition: color 0.3s ease;
     }
+
     .course-link:hover {
       text-decoration: underline;
-      color: #1976D2;
+      color: var(--v-primary-base);
     }
+
+    .conflict-item {
+      background-color: var(--v-error-lighten5) !important;
+      border-left: 4px solid var(--v-error-base);
+    }
+
+    .audit-item {
+      background-color: var(--v-secondary-lighten5) !important;
+      opacity: 0.8;
+    }
+
+    /* 课程单元格容器 */
+    .course-cell-container {
+      width: calc(100% / 7) !important; /* 确保每列宽度相等 */
+      height: 120px !important; /* 固定高度 */
+      padding: 4px !important;
+      vertical-align: top !important;
+    }
+
+    /* 课程单元格样式 */
+    .course-cell {
+      width: 100% !important;
+      height: 100% !important;
+      padding: 8px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      transition: all 0.3s ease;
+      border-radius: 4px;
+    }
+
+    /* 课程标题样式 */
+    .course-title {
+      font-size: 0.9rem !important;
+      font-weight: 500 !important;
+      line-height: 1.2 !important;
+      margin-bottom: 4px !important;
+      overflow: hidden !important;
+      display: -webkit-box !important;
+      -webkit-line-clamp: 2 !important; /* 最多显示两行 */
+      -webkit-box-orient: vertical !important;
+      word-break: break-word !important;
+    }
+
+    /* 课程信息样式 */
+    .course-info {
+      font-size: 0.75rem !important;
+      line-height: 1.2 !important;
+      overflow: hidden !important;
+      display: -webkit-box !important;
+      -webkit-line-clamp: 3 !important; /* 最多显示三行 */
+      -webkit-box-orient: vertical !important;
+      opacity: 0.8;
+      flex-grow: 1;
+    }
+
+    /* 周次标签样式 */
+    .week-type-chip {
+      margin-top: 4px !important;
+      height: 20px !important;
+      font-size: 0.7rem !important;
+    }
+
+    /* 浅色主题课程样式 */
+    .theme--light .course-regular {
+      background-color: #E3F2FD !important;
+      border: 1px solid #2196F3 !important;
+      border-left: 3px solid #2196F3 !important;
+    }
+
+    .theme--light .course-audit {
+      background-color: #E8EAF6 !important;
+      border: 1px solid #3F51B5 !important;
+      border-left: 3px solid #3F51B5 !important;
+    }
+
+    /* 深色主题课程样式 */
+    .theme--dark .course-regular {
+      background-color: rgba(33, 150, 243, 0.15) !important;  /* 柔和的蓝色 */
+      border: 1px solid rgba(33, 150, 243, 0.5) !important;
+      border-left: 3px solid #2196F3 !important;
+    }
+
+    .theme--dark .course-audit {
+      background-color: rgba(156, 39, 176, 0.15) !important;  /* 柔和的紫色 */
+      border: 1px solid rgba(156, 39, 176, 0.5) !important;
+      border-left: 3px solid #9C27B0 !important;
+    }
+
+    /* 单双周透明度 */
+    .course-alternate {
+      opacity: 0.85 !important;
+    }
+
+    /* 悬浮效果 */
+    .course-cell:hover {
+      transform: scale(1.02);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      z-index: 1;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 960px) {
+      .course-cell-container {
+        height: 100px !important;
+      }
+      
+      .course-title {
+        font-size: 0.8rem !important;
+        -webkit-line-clamp: 1 !important;
+      }
+      
+      .course-info {
+        font-size: 0.7rem !important;
+        -webkit-line-clamp: 2 !important;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .course-cell-container {
+        height: 80px !important;
+      }
+      
+      .course-title {
+        font-size: 0.75rem !important;
+      }
+      
+      .course-info {
+        font-size: 0.65rem !important;
+        -webkit-line-clamp: 1 !important;
+      }
+      
+      .week-type-chip {
+        display: none !important;
+      }
+    }
+
+    /* 搜索工具栏样式 */
+    .search-toolbar {
+      border-radius: 12px !important;
+      margin: 16px auto !important;
+      max-width: 1200px !important;
+      background: rgba(var(--v-background), 0.7) !important;
+      backdrop-filter: blur(10px) !important;
+      -webkit-backdrop-filter: blur(10px) !important;
+      min-height: 80px !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    /* 容器样式 */
+    .v-toolbar__content {
+      height: auto !important;
+      padding: 12px 0 !important;
+      width: 100% !important;
+    }
+
+    /* 搜索行样式 */
+    .search-row {
+      margin: 0 !important;
+      height: 100% !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+
+    /* 搜索列样式 */
+    .search-col {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 0 8px !important;
+    }
+
+    /* 搜索字段统一样式 */
+    .search-field {
+      width: 100% !important;
+      margin: 0 !important;
+    }
+
+    /* 输入框统一样式 */
+    .v-text-field.rounded-lg .v-input__control > .v-input__slot,
+    .v-combobox.rounded-lg .v-input__control > .v-input__slot {
+      border-radius: 12px !important;
+      min-height: 40px !important;
+      max-height: 40px !important;
+      padding: 0 12px !important;
+    }
+
+    /* 输入框内部布局 */
+    .v-input__slot {
+      margin-bottom: 0 !important;
+    }
+
+    .v-text-field__slot,
+    .v-select__slot {
+      height: 40px !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 960px) {
+      .search-toolbar {
+        min-height: 70px !important;
+      }
+
+      .v-toolbar__content {
+        padding: 8px 0 !important;
+      }
+
+      .search-col {
+        padding: 0 4px !important;
+      }
+
+      .v-text-field.rounded-lg .v-input__control > .v-input__slot,
+      .v-combobox.rounded-lg .v-input__control > .v-input__slot {
+        min-height: 36px !important;
+        max-height: 36px !important;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .search-toolbar {
+        min-height: 180px !important;
+      }
+
+      .search-col {
+        margin: 4px 0 !important;
+      }
+    }
+
+    /* 确保背景色一致 */
+    .theme--light .search-field.v-text-field--filled > .v-input__control > .v-input__slot,
+    .theme--light .search-field.v-select--filled > .v-input__control > .v-input__slot {
+      background: white !important;
+    }
+
+    .theme--dark .search-field.v-text-field--filled > .v-input__control > .v-input__slot,
+    .theme--dark .search-field.v-select--filled > .v-input__control > .v-input__slot {
+      background: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* 时间表容器样式 */
+    .timetable-container {
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 4px !important;
+      overflow: hidden !important;
+    }
+
+    /* 表格列宽控制 */
+    .time-column {
+      width: 80px !important;
+      min-width: 80px !important;
+      white-space: nowrap !important;
+      font-size: 0.75rem !important;
+      padding: 4px 2px !important;
+    }
+
+    .weekday-column {
+      width: calc((100% - 80px) / 7) !important;
+      font-size: 0.8rem !important;
+      padding: 4px 2px !important;
+    }
+
+    /* 课程单元格容器 */
+    .course-cell-container {
+      height: 70px !important;
+      padding: 2px !important;
+      vertical-align: top !important;
+    }
+
+    /* 课程单元格样式 */
+    .course-cell {
+      padding: 4px !important;
+      height: 100% !important;
+    }
+
+    /* 课程标题样式 */
+    .course-title {
+      font-size: 0.8rem !important;
+      line-height: 1.1 !important;
+      margin-bottom: 2px !important;
+      -webkit-line-clamp: 2 !important;
+    }
+
+    /* 课程信息样式 */
+    .course-info {
+      font-size: 0.65rem !important;
+      line-height: 1.1 !important;
+      -webkit-line-clamp: 2 !important;
+    }
+
+    /* 周次标签样式 */
+    .week-type-chip {
+      height: 16px !important;
+      font-size: 0.6rem !important;
+      margin-top: 2px !important;
+    }
+
+    /* 时间列文字样式 */
+    .time-column .text-caption {
+      font-size: 0.65rem !important;
+      opacity: 0.8;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 1264px) {
+      .time-column {
+        width: 70px !important;
+        min-width: 70px !important;
+        font-size: 0.7rem !important;
+      }
+
+      .weekday-column {
+        font-size: 0.75rem !important;
+      }
+
+      .course-cell-container {
+        height: 65px !important;
+      }
+
+      .course-title {
+        font-size: 0.75rem !important;
+      }
+
+      .course-info {
+        font-size: 0.6rem !important;
+      }
+    }
+
+    @media (max-width: 960px) {
+      .time-column {
+        width: 60px !important;
+        min-width: 60px !important;
+        font-size: 0.65rem !important;
+      }
+
+      .course-cell-container {
+        height: 60px !important;
+      }
+
+      .course-title {
+        font-size: 0.7rem !important;
+        -webkit-line-clamp: 1 !important;
+      }
+
+      .course-info {
+        font-size: 0.55rem !important;
+        -webkit-line-clamp: 1 !important;
+      }
+
+      .week-type-chip {
+        display: none !important;
+      }
+    }
+
+    /* 表格边框和分隔线 */
     .v-data-table {
-      width: 100%;
+      border: 1px solid rgba(0, 0, 0, 0.12) !important;
     }
+
+    .theme--dark .v-data-table {
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    }
+
+    .v-data-table th, 
     .v-data-table td {
-      white-space: normal !important;
-      word-break: break-word;
+      border: 1px solid rgba(0, 0, 0, 0.12) !important;
     }
-    .v-data-footer__select {
-      margin-right: 14px !important;
+
+    .theme--dark .v-data-table th, 
+    .theme--dark .v-data-table td {
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
     }
-    .v-data-footer__select .v-input__slot {
-      margin-bottom: 0;
+
+    /* 毛玻璃效果基础样式 */
+    .glassmorphism-light, .glassmorphism-dark {
+      backdrop-filter: blur(10px) !important;
+      -webkit-backdrop-filter: blur(10px) !important;
+      position: relative !important;
+      overflow: hidden !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
     }
-    .container.fluid {
-      max-width: none !important;
-      width: 100%;
-      padding: 16px;
+
+    /* 亮色主题毛玻璃 */
+    .glassmorphism-light {
+      background: rgba(255, 255, 255, 0.7) !important;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    .glassmorphism-light::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(
+        120deg,
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.1) 100%
+      );
+      z-index: 0;
+    }
+
+    /* 暗色主题毛玻璃 */
+    .glassmorphism-dark {
+      background: rgba(18, 18, 18, 0.7) !important;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    .glassmorphism-dark::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(
+        120deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.02) 100%
+      );
+      z-index: 0;
+    }
+
+    /* 动态光效 */
+    .blur-background {
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(
+        circle at center,
+        transparent 0%,
+        rgba(var(--v-primary-base), 0.05) 45%,
+        transparent 70%
+      );
+      animation: rotate 20s linear infinite;
+      z-index: -1;
+    }
+
+    /* 确保内容在毛玻璃效果之上 */
+    .v-toolbar__title,
+    .v-btn {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* 主题切换按钮效果 */
+    .theme-toggle-btn {
+      transition: transform 0.3s ease !important;
+    }
+
+    .theme-toggle-btn:hover {
+      transform: rotate(30deg);
+    }
+
+    /* 动画效果 */
+    @keyframes rotate {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 600px) {
+      .v-toolbar__title {
+        font-size: 1rem !important;
+      }
+      
+      .glassmorphism-light,
+      .glassmorphism-dark {
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+      }
+    }
+
+    /* 优化标题栏内容 */
+    .v-toolbar__title {
+      font-weight: 500 !important;
+      letter-spacing: 0.5px !important;
+      background: linear-gradient(
+        90deg,
+        var(--v-primary-base),
+        var(--v-secondary-base)
+      );
+      -webkit-background-clip: text !important;
+      background-clip: text !important;
+      color: transparent !important;
+      opacity: 0.9;
+    }
+
+    /* 确保毛玻璃效果在滚动时保持 */
+    .v-app-bar--fixed {
+      position: fixed !important;
     }
   </style>
 </body>
