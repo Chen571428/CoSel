@@ -618,7 +618,7 @@
           const csvContent = "课程名称,星期,开始节数,结束节数,老师,地点,周数\n" + 
             csvRows.join('\n');
 
-          this.downloadCSV(csvContent, 'wakeup_schedule.csv');
+          this.downloadCSV(csvContent, 'WakeUP导入.csv');
         },
         exportSelectionList() {
           if (!this.studentId || !this.studentName) {
@@ -647,7 +647,7 @@
               ].join(',');
             }).join('\n');
 
-          this.downloadCSV(csvContent, 'course_selection.csv');
+          this.downloadCSV(csvContent, `${this.studentName}预科选课单.csv`);
           this.dialog = false;
         },
         downloadCSV(content, filename) {
