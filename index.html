@@ -9,6 +9,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
 </head>
 <body>
+  <!-- 加载动画 -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-spinner">
+        <v-progress-circular
+          indeterminate
+          size="64"
+          width="4"
+          color="primary"
+          class="spinner"
+        ></v-progress-circular>
+        <div class="loading-ripple"></div>
+      </div>
+      <div class="loading-text">
+        <span>加载中</span>
+        <span class="dots">
+          <span>.</span><span>.</span><span>.</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
   <div id="app">
     <v-app>
       <v-main>
@@ -512,6 +534,20 @@
   <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
   
   <script>
+    // 页面加载完成后移除加载动画
+    window.addEventListener('load', function() {
+      // 延迟移除加载动画，提供更流畅的体验
+      setTimeout(() => {
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) {
+          loadingOverlay.classList.add('fade-out');
+          setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+          }, 600); // 匹配 CSS transition 时间
+        }
+      }, 800); // 额外延迟以确保动画效果
+    });
+
     new Vue({
       el: '#app',
       vuetify: new Vuetify({
@@ -695,13 +731,16 @@
         }
       },
       mounted() {
-        // 监听系统主题变化
-        if (window.matchMedia) {
-          const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-          mediaQuery.addListener((e) => {
-            this.$vuetify.theme.dark = e.matches;
-          });
-        }
+        // 确保在 Vue 实例挂载后延迟移除加载动画
+        setTimeout(() => {
+          const loadingOverlay = document.getElementById('loading-overlay');
+          if (loadingOverlay && !loadingOverlay.classList.contains('fade-out')) {
+            loadingOverlay.classList.add('fade-out');
+            setTimeout(() => {
+              loadingOverlay.style.display = 'none';
+            }, 600);
+          }
+        }, 800);
       },
       methods: {
         formatWeekday(timeStr) {
@@ -1071,6 +1110,135 @@
   </script>
 
   <style>
+    /* 隐藏未编译的 Vue 模板 */
+    [v-cloak] {
+      display: none;
+    }
+
+    /* 加载遮罩层样式 */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      transition: opacity 0.6s ease-out;
+    }
+
+    /* 深色主题加载遮罩层 */
+    @media (prefers-color-scheme: dark) {
+      .loading-overlay {
+        background: rgba(33, 33, 33, 0.95);
+      }
+    }
+
+    /* 加载内容容器 */
+    .loading-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      transform: translateY(0);
+      transition: transform 0.6s ease-out;
+    }
+
+    /* 加载动画容器 */
+    .loading-spinner {
+      position: relative;
+      width: 80px;
+      height: 80px;
+    }
+
+    /* 主旋转动画 */
+    .spinner {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* 波纹效果 */
+    .loading-ripple {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--v-primary-base) 0%, transparent 70%);
+      opacity: 0.2;
+      animation: ripple 2s ease-out infinite;
+    }
+
+    /* 加载文字样式 */
+    .loading-text {
+      font-size: 1.2rem;
+      font-weight: 500;
+      color: var(--v-primary-base);
+      display: flex;
+      align-items: center;
+      opacity: 0.9;
+    }
+
+    /* 加载点动画 */
+    .dots span {
+      opacity: 0;
+      animation: dots 1.4s infinite;
+      margin-left: 2px;
+    }
+
+    .dots span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .dots span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    /* 淡出效果 */
+    .loading-overlay.fade-out {
+      opacity: 0;
+    }
+
+    .loading-overlay.fade-out .loading-content {
+      transform: translateY(-20px);
+    }
+
+    /* 动画关键帧 */
+    @keyframes ripple {
+      0% {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 0.2;
+      }
+      50% {
+        transform: translate(-50%, -50%) scale(1.2);
+        opacity: 0.1;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 0.2;
+      }
+    }
+
+    @keyframes dots {
+      0%, 20% {
+        opacity: 0;
+        transform: translateY(0);
+      }
+      50% {
+        opacity: 1;
+        transform: translateY(-2px);
+      }
+      80%, 100% {
+        opacity: 0;
+        transform: translateY(0);
+      }
+    }
+
     .course-link {
       text-decoration: none;
       color: inherit;
