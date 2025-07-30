@@ -12,6 +12,7 @@ import bs4
 import pandas as pd
 import requests
 from rich.logging import RichHandler
+from tqdm import tqdm
 
 Query = namedtuple(
     "Query", ["coursename", "teachername", "yearandseme", "coursetype", "yuanxi"]
@@ -275,15 +276,64 @@ def getCourseList(query: Query = data, retry: int = 3, parallel: bool = False):
     # Get the course list in segments of 10 rows
     segs = list(range(0, total_count, 10))
     logger.info(f"Got {total_count} courses, {len(segs)} segments to fetch")
+    
+    # Estimate time based on typical request speed (approximately 0.5-1 second per request)
+    estimated_time = len(segs) * 0.75  # seconds
+    if estimated_time > 60:
+        logger.info(f"Estimated time: {estimated_time/60:.1f} minutes")
+    else:
+        logger.info(f"Estimated time: {estimated_time:.0f} seconds")
 
-    # Iterate over each segment and try to retrieve the courses
+    # Record start time for actual time tracking
+    start_time = time.time()
+    
+    # Iterate over each segment and try to retrieve the courses with progress bar
     if parallel:
         # Note: parallel processing with sessions is complex, using sequential for now
         logger.warning("Parallel processing not supported with verification codes, using sequential...")
-        result = [getCourseListPart(query, str(seg), retry, session, vercode) for seg in segs]
+        result = []
+        with tqdm(total=len(segs), desc="Fetching course data", unit="segment") as pbar:
+            for seg in segs:
+                segment_result = getCourseListPart(query, str(seg), retry, session, vercode)
+                result.append(segment_result)
+                pbar.update(1)
+                
+                # Update ETA based on actual progress
+                elapsed = time.time() - start_time
+                if pbar.n > 0:
+                    avg_time_per_segment = elapsed / pbar.n
+                    remaining_segments = len(segs) - pbar.n
+                    eta_seconds = remaining_segments * avg_time_per_segment
+                    if eta_seconds > 60:
+                        pbar.set_postfix(ETA=f"{eta_seconds/60:.1f}min")
+                    else:
+                        pbar.set_postfix(ETA=f"{eta_seconds:.0f}s")
     else:
-        # use good old for loop
-        result = [getCourseListPart(query, str(seg), retry, session, vercode) for seg in segs]
+        # use good old for loop with progress bar
+        result = []
+        with tqdm(total=len(segs), desc="Fetching course data", unit="segment") as pbar:
+            for seg in segs:
+                segment_result = getCourseListPart(query, str(seg), retry, session, vercode)
+                result.append(segment_result)
+                pbar.update(1)
+                
+                # Update ETA based on actual progress
+                elapsed = time.time() - start_time
+                if pbar.n > 0:
+                    avg_time_per_segment = elapsed / pbar.n
+                    remaining_segments = len(segs) - pbar.n
+                    eta_seconds = remaining_segments * avg_time_per_segment
+                    if eta_seconds > 60:
+                        pbar.set_postfix(ETA=f"{eta_seconds/60:.1f}min")
+                    else:
+                        pbar.set_postfix(ETA=f"{eta_seconds:.0f}s")
+
+    # Calculate and display total time taken
+    total_time = time.time() - start_time
+    if total_time > 60:
+        logger.info(f"Total time taken: {total_time/60:.1f} minutes")
+    else:
+        logger.info(f"Total time taken: {total_time:.0f} seconds")
 
     # Check if there are any failed requests left
     failed = [idx * 10 for idx, item in enumerate(result) if item is None]
@@ -374,7 +424,7 @@ def main():
         "--loglevel",
         help="Log level for printing to console (default 2:INFO)",
         type=int,
-        default=0,
+        default=2,
     )
     argparser.add_argument(
         "-p",
