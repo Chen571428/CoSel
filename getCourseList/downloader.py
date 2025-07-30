@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import re
+import time
 from argparse import ArgumentParser
 from collections import namedtuple
 from multiprocessing import Pool
@@ -30,14 +31,14 @@ user_agents = [
 ]
 
 headers = {
-    "Origin": "http://www.dean.pku.edu.cn",
-    "Referer": "http://www.dean.pku.edu.cn/service/web/courseSearch.php",
+    "Origin": "https://dean.pku.edu.cn",
+    "Referer": "https://dean.pku.edu.cn/service/web/courseSearch.php",
     "Content-Type": "application/x-www-form-urlencoded",
 }
 data = Query("", "", "24-25-2", "0", "0")
 HTML_tag_pattern = re.compile("<.*?>")
-request_url = "http://www.dean.pku.edu.cn/service/web/courseSearch_do.php"
-base_url = "http://www.dean.pku.edu.cn/service/web/courseSearch.php"
+request_url = "https://dean.pku.edu.cn/service/web/courseSearch_do.php"
+base_url = "https://dean.pku.edu.cn/service/web/courseSearch.php"
 colnames = [
     "序号",
     "课程号",
@@ -71,26 +72,71 @@ def stripHTMLtags(text):
     return re.sub(HTML_tag_pattern, "", text)
 
 
-def _post(query: Query, startrow: str = "0"):
+def getVerificationCode(session):
+    """Download verification code image and prompt user to input"""
+    global logger
+    try:
+        response = session.get("https://dean.pku.edu.cn/service/web/course_vercode.php", headers=getHeaders())
+        if response.status_code == 200:
+            # Save the verification code image
+            with open("vercode.png", "wb") as f:
+                f.write(response.content)
+            logger.info("Verification code image saved as 'vercode.png'")
+            logger.info("Please open 'vercode.png' and enter the verification code:")
+            vercode = input("Verification code: ").strip()
+            return vercode
+        else:
+            logger.error(f"Failed to get verification code: {response.status_code}")
+            return ""
+    except Exception as e:
+        logger.error(f"Error getting verification code: {str(e)}")
+        return ""
+
+
+def createSession():
+    """Create a session and get initial cookies"""
+    session = requests.Session()
+    try:
+        # Visit the main page to get session cookies
+        response = session.get(base_url, headers=getHeaders())
+        if response.status_code == 200:
+            logger.debug("Session created successfully")
+            return session
+        else:
+            logger.error(f"Failed to create session: {response.status_code}")
+            return None
+    except Exception as e:
+        logger.error(f"Error creating session: {str(e)}")
+        return None
+
+
+def _post(query: Query, startrow: str = "0", session=None, vercode=""):
     global logger
     logger.debug(f"POST {request_url} with {query._asdict() | {'startrow': startrow}}")
-    return requests.post(
-        request_url, headers=getHeaders(), data=query._asdict() | {"startrow": startrow}
+    
+    if session is None:
+        session = requests.Session()
+    
+    # Add verification code to the data
+    post_data = query._asdict() | {"startrow": startrow, "vercode": vercode}
+    
+    return session.post(
+        request_url, headers=getHeaders(), data=post_data
     )
 
 
-def getCourseListPart(query: Query, startrow: str, retry: int):
+def getCourseListPart(query: Query, startrow: str, retry: int, session=None, vercode=""):
     """Get a part of the course list, 10 rows per request"""
 
     global logger
-    response = _post(query, startrow)
+    response = _post(query, startrow, session, vercode)
 
     # Loop to re-attempt if the server does not return a 200 status code
     while response.status_code != 200 and retry > 0:
         logger.warning(
             f"Got status code {response.status_code} from server, retrying {retry} times left..."
         )
-        response = _post(query, startrow)
+        response = _post(query, startrow, session, vercode)
         retry -= 1
 
     # Return error message if the request fails after having retried
@@ -103,14 +149,21 @@ def getCourseListPart(query: Query, startrow: str, retry: int):
     # Try to parse data into a json object
     try:
         json = response.json()
-    except Exception:
+    except Exception as e:
         logger.error(
-            f"Failed to parse JSON from seg {int(startrow) // 10}, aborting..."
+            f"Failed to parse JSON from seg {int(startrow) // 10}: {str(e)}"
         )
+        logger.error(f"Response content: {response.text[:200]}...")
+        return None
+
+    # Check if the response indicates verification code error
+    if "courselist" not in json:
+        logger.error(f"No courselist in response, might need verification code")
+        logger.error(f"Response: {json}")
         return None
 
     # Create dataframe, apply stripping of HTML tags and set index as '序号'
-    df = pd.DataFrame(json["courselist"]).applymap(stripHTMLtags)
+    df = pd.DataFrame(json["courselist"]).map(stripHTMLtags)
     df.columns = colnames
     df.set_index("序号", inplace=True)
 
@@ -119,18 +172,18 @@ def getCourseListPart(query: Query, startrow: str, retry: int):
     return df
 
 
-def getTotalCount(query: Query, retry: int):
+def getTotalCount(query: Query, retry: int, session=None, vercode=""):
     """Get the total number of courses matching the query"""
 
     global logger
-    response = _post(query)
+    response = _post(query, "0", session, vercode)
 
     # Loop to re-attempt if the server does not return a 200 status code
     while response.status_code != 200 and retry > 0:
         logger.warning(
             f"Got status code {response.status_code} from server, retrying {retry} times left..."
         )
-        response = _post(query)
+        response = _post(query, "0", session, vercode)
         retry -= 1
 
     # Return error message if the request fails after having retried
@@ -143,8 +196,15 @@ def getTotalCount(query: Query, retry: int):
     # Try to parse data into a json object
     try:
         json = response.json()
-    except Exception:
-        logger.error(f"Failed to parse JSON, aborting...")
+    except Exception as e:
+        logger.error(f"Failed to parse JSON: {str(e)}")
+        logger.error(f"Response content: {response.text[:200]}...")
+        return None
+
+    # Check if count is in the response
+    if "count" not in json:
+        logger.error(f"No count in response, might need verification code")
+        logger.error(f"Response: {json}")
         return None
 
     # Log success information
@@ -191,8 +251,18 @@ def getCourseList(query: Query = data, retry: int = 3, parallel: bool = False):
 
     global logger
 
+    # Create session and get verification code
+    session = createSession()
+    if session is None:
+        logger.critical("Failed to create session, aborting...")
+        return None
+    
+    vercode = getVerificationCode(session)
+    if not vercode:
+        logger.warning("No verification code provided, trying without it...")
+
     # Get the total number of matching courses
-    total_count = getTotalCount(query, retry)
+    total_count = getTotalCount(query, retry, session, vercode)
     if total_count is None:
         logger.critical(f"Failed to get total count, aborting...")
         return None
@@ -208,14 +278,12 @@ def getCourseList(query: Query = data, retry: int = 3, parallel: bool = False):
 
     # Iterate over each segment and try to retrieve the courses
     if parallel:
-        # use a multiprocessing pool to speed up
-        pool = Pool()
-        result = pool.map(
-            ft.partial(getCourseListPart, query, retry=retry), map(str, segs)
-        )
+        # Note: parallel processing with sessions is complex, using sequential for now
+        logger.warning("Parallel processing not supported with verification codes, using sequential...")
+        result = [getCourseListPart(query, str(seg), retry, session, vercode) for seg in segs]
     else:
         # use good old for loop
-        result = [getCourseListPart(query, str(seg), retry) for seg in segs]
+        result = [getCourseListPart(query, str(seg), retry, session, vercode) for seg in segs]
 
     # Check if there are any failed requests left
     failed = [idx * 10 for idx, item in enumerate(result) if item is None]
@@ -325,6 +393,13 @@ def main():
         help="Year and semester to look up for (e.g. 22-23-1 stands for the first semester in year 2022-2023)",
         type=str,
         default="24-25-2"
+    )
+    argparser.add_argument(
+        "-v",
+        "--vercode",
+        help="Verification code (if not provided, will prompt for input)",
+        type=str,
+        default=""
     )
     args = argparser.parse_args()
     logger.setLevel(args.loglevel * 10)
