@@ -1,6 +1,6 @@
 import csv
 
-input_file = 'CN_TN_YS24-25-2_CT0_YX0.csv'
+input_file = 'CN_TN_YS25-26-1_CT0_YX0.csv'
 output_file = 'unique_courses.csv'
 class Uniqunizer:
     def __init__(self, input_file, output_file):
@@ -26,3 +26,6 @@ class Uniqunizer:
             for course in unique_coursesList:
                 writer.writerow(course)
         
+if __name__ == '__main__':
+    Uniqunizer = Uniqunizer(input_file,output_file)
+    Uniqunizer.unique()

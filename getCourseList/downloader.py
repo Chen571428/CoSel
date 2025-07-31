@@ -442,7 +442,7 @@ def main():
         "-ys",
         help="Year and semester to look up for (e.g. 22-23-1 stands for the first semester in year 2022-2023)",
         type=str,
-        default="24-25-2"
+        default="25-26-1"
     )
     argparser.add_argument(
         "-v",
